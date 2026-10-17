@@ -180,6 +180,11 @@ header {
   justify-content:space-between;
   align-items:center
 }
+.header-actions {
+  display:flex;
+  align-items:center;
+  gap:12px
+}
 h1 {
   font-size:29px;
   letter-spacing:-1px;
@@ -259,12 +264,44 @@ select {
   margin:13px 0 20px;
   line-height:1.7
 }
-#ignore-settings {
-  margin:0 0 18px;
-  padding:13px 16px;
+#settings-dialog {
+  width:min(680px,calc(100vw - 48px));
+  max-height:calc(100dvh - 48px);
+  padding:0;
   border:1px solid #dce3d7;
-  border-radius:8px;
-  background:#fff
+  border-radius:12px;
+  background:#fff;
+  color:inherit;
+  overflow:hidden
+}
+#settings-dialog[open] {
+  display:flex;
+  flex-direction:column
+}
+#settings-dialog::backdrop {
+  background:#172c2366
+}
+.settings-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:20px 24px;
+  border-bottom:1px solid #e3e8df;
+  flex-shrink:0
+}
+.settings-header h2 {
+  margin:0;
+  font-size:21px
+}
+.settings-content {
+  padding:20px 24px 24px;
+  overflow-y:auto;
+  min-height:0
+}
+#ignore-title {
+  margin:0;
+  font-size:15px
 }
 #ignore-form {
   margin-top:14px
@@ -295,22 +332,26 @@ select {
   gap:10px;
   flex-wrap:wrap
 }
-#notice {
+#notice,#settings-notice {
   overflow-wrap:anywhere;
   font-size:12px;
   color:#59764b;
   line-height:1.7;
   min-height:0
 }
-#notice:not(:empty) {
+#notice:not(:empty),#settings-notice:not(:empty) {
   padding:10px 13px;
   background:#edf3e8;
   border-radius:8px;
   margin-bottom:15px
 }
-#notice.error {
+#notice.error,#settings-notice.error {
   color:#9d513c;
   background:#f7ede8
+}
+#settings-notice:not(:empty) {
+  margin:0 24px 20px;
+  flex-shrink:0
 }
 .group {
   background:#fff;

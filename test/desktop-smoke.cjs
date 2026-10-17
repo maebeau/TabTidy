@@ -34,6 +34,9 @@ async function waitFor(check) {
   }))`);
   await waitFor(() => js("Boolean(document.getElementById('connection-code').value)"));
   const token = await js('window.tabTidy.getState().then(state => state.token)');
+  assert.equal(await js("document.getElementById('settings-dialog').open"), false, '设置默认关闭');
+  assert.equal(await js("document.querySelector('main #ignore-settings')"), null, '主列表不再包含忽略规则表单');
+  assert.equal(await js("document.getElementById('ignore-form').closest('dialog').id"), 'settings-dialog');
   assert.deepEqual(await js('window.tabTidy.getState().then(state => state.ignoreRules)'), [legacyRule]);
   assert.equal(await readFile(join(temporary, 'ignored-names.json'), 'utf8'), legacyFile, '自动迁移不能在读取时改写旧文件');
   const post = async (sourceId, browser, tabs) => {
@@ -93,6 +96,33 @@ async function waitFor(check) {
   assert.equal(await js("document.activeElement?.classList.contains('group-checkbox')"), true, '同步后应保留组勾选框焦点');
   assert.deepEqual(await groupSelection(), [{ checked: false, indeterminate: false, selected: 0 }], '同步后应保留整组取消勾选');
   assert.equal(await js("document.getElementById('selected-count').textContent"), '0');
+  await js("document.getElementById('open-settings').focus(); document.getElementById('open-settings').click()");
+  assert.equal(await js("document.getElementById('settings-dialog').matches(':modal')"), true);
+  assert.equal(await js('document.activeElement.id'), 'close-settings');
+  window.focus();
+  for (let index = 0; index < 12; index++) {
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+    assert.equal(await js("document.getElementById('settings-dialog').contains(document.activeElement)"), true, 'Tab 焦点应限制在设置中');
+  }
+  await js("document.getElementById('close-settings').focus()");
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab', modifiers: ['shift'] });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab', modifiers: ['shift'] });
+  assert.equal(await js('document.activeElement.id'), 'save-ignore', 'Shift+Tab 应从首项循环到末项');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+  assert.equal(await js('document.activeElement.id'), 'close-settings', 'Tab 应从末项循环到首项');
+  await js("document.getElementById('ignore-name').value='未保存的规则'; document.getElementById('close-settings').click()");
+  assert.equal(await js("document.getElementById('settings-dialog').open"), false);
+  assert.equal(await js('document.activeElement.id'), 'open-settings', '关闭设置应恢复入口焦点');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '0', '打开和关闭设置不应改变人工勾选');
+  assert.deepEqual(await js('window.tabTidy.getState().then(state => state.ignoreRules)'), [legacyRule], '关闭设置不应保存草稿');
+  await js("document.getElementById('open-settings').focus(); document.getElementById('open-settings').click()");
+  assert.equal(await js("document.getElementById('ignore-name').value"), '未保存的规则', '重开设置应保留填写草稿');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(() => js("!document.getElementById('settings-dialog').open"));
+  assert.equal(await js('document.activeElement.id'), 'open-settings', 'Esc 应恢复入口焦点');
   const contrastColors = await js("['.tab-url', '.tab-time', '.note', '.source small', '.muted'].map(selector => ({ selector, color: getComputedStyle(document.querySelector(selector)).color }))");
   const luminance = (rgb) => rgb.map((value) => value / 255).map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
     .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
@@ -180,8 +210,9 @@ async function waitFor(check) {
   await post('chrome-test', 'Chrome', noisy);
   await waitFor(() => js("document.querySelectorAll('.tab-row').length === 5"));
   assert.ok((await js("Array.from(document.getElementById('website-hosts').options, option => option.value)")).includes('noise.example'));
-  await js("document.getElementById('ignore-settings').open=true; document.getElementById('ignore-name').value='小说站'; document.getElementById('ignore-domains').value='NOISE.EXAMPLE\\narchive.example'; document.getElementById('ignore-words').value='xxxx\\n下载专区'; document.getElementById('save-ignore').focus(); document.getElementById('save-ignore').click()");
+  await js("document.getElementById('open-settings').focus(); document.getElementById('open-settings').click(); document.getElementById('ignore-name').value='小说站'; document.getElementById('ignore-domains').value='NOISE.EXAMPLE\\narchive.example'; document.getElementById('ignore-words').value='xxxx\\n下载专区'; document.getElementById('save-ignore').focus(); document.getElementById('save-ignore').click()");
   await waitFor(() => js("document.getElementById('notice').textContent.includes('忽略规则已保存')"));
+  assert.ok((await js("document.getElementById('settings-notice').textContent")).includes('忽略规则已保存'), '保存结果应在设置中可见');
   assert.equal(await js('document.activeElement.id'), 'save-ignore', '保存后应恢复键盘操作位置');
   assert.equal(await js("document.querySelectorAll('.tab-row').length"), 2);
   assert.equal(await js("Array.from(document.querySelectorAll('.tab-row input')).every(input => input.dataset.tabId.startsWith('edge-test:'))"), true, '规则不能影响另一网站');
@@ -202,12 +233,14 @@ async function waitFor(check) {
   await waitFor(() => js("document.getElementById('tab-count').textContent === '5'"));
   assert.equal(await js("document.getElementById('ignore-words').value"), 'draft');
   assert.equal(await js('document.activeElement.id'), 'ignore-words', '同步不能打断设置编辑或丢失焦点');
+  assert.ok((await js("document.getElementById('settings-notice').textContent")).includes('忽略规则已保存'), '浏览器同步不应覆盖设置操作结果');
   const loaded = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
   window.webContents.reload();
   await loaded;
   await waitFor(() => js("Boolean(document.getElementById('connection-code').value)"));
   assert.equal(await js("document.querySelectorAll('.group').length"), 2, '重新加载界面后规则应自动应用');
-  await js("document.getElementById('ignore-settings').open=true; document.getElementById('ignore-rule').value='1'; document.getElementById('ignore-rule').dispatchEvent(new Event('change'))");
+  assert.equal(await js("document.getElementById('settings-dialog').open"), false, '重载后设置应默认关闭');
+  await js("document.getElementById('open-settings').focus(); document.getElementById('open-settings').click(); document.getElementById('ignore-rule').value='1'; document.getElementById('ignore-rule').dispatchEvent(new Event('change'))");
   assert.equal(await js("document.getElementById('ignore-name').value"), '小说站');
   assert.equal(await js("document.getElementById('ignore-domains').value"), 'noise.example\narchive.example');
   assert.equal(await js("document.getElementById('ignore-words').value"), 'xxxx\n下载专区');
@@ -219,12 +252,14 @@ async function waitFor(check) {
   await post('chrome-test', 'Chrome', [...bookTabs, { id: 27, title: 'efg 下载专区', url: 'https://fresh.example/page' }]);
   await waitFor(() => js("document.getElementById('tab-count').textContent === '5'"));
   assert.equal(await js("document.querySelectorAll('.tab-row').length"), 4, '新域名应立即共用原规则的忽略词');
-  window.setSize(980, 1100);
+  window.setSize(980, 640);
   await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
   assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true, '最小宽度不应横向溢出');
-  await writeFile('artifacts/ignored-names-preview.png', (await window.webContents.capturePage()).toPNG());
+  assert.equal(await js("(() => { const dialog = document.getElementById('settings-dialog'); const rect = dialog.getBoundingClientRect(); const content = dialog.querySelector('.settings-content'); const close = document.getElementById('close-settings').getBoundingClientRect(); const result = document.getElementById('settings-notice').getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight && dialog.scrollWidth <= dialog.clientWidth && content.scrollHeight > content.clientHeight && close.top >= rect.top && close.bottom <= rect.bottom && result.bottom <= innerHeight; })()"), true, '最小窗口中设置可滚动，返回按钮和结果应保持可见');
+  await writeFile('artifacts/settings-preview.png', (await window.webContents.capturePage()).toPNG());
   await js("document.getElementById('ignore-rule').value='-1'; document.getElementById('ignore-rule').dispatchEvent(new Event('change')); document.getElementById('ignore-name').value='冲突站点'; document.getElementById('ignore-domains').value='NOISE.EXAMPLE'; document.getElementById('ignore-words').value='其他词'; document.getElementById('save-ignore').click()");
   await waitFor(() => js("document.getElementById('notice').textContent.includes('已用于')"));
+  assert.ok((await js("document.getElementById('settings-notice').textContent")).includes('已用于'), '保存错误应在设置中显示');
   assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), savedRules, '冲突域名不能覆盖旧规则');
   await js("document.getElementById('ignore-rule').value='1'; document.getElementById('ignore-rule').dispatchEvent(new Event('change')); document.getElementById('ignore-words').value='---'; document.getElementById('save-ignore').click()");
   await waitFor(() => js("document.getElementById('notice').textContent.includes('每个忽略词')"));
@@ -237,9 +272,11 @@ async function waitFor(check) {
   await js("document.getElementById('ignore-rule').value='0'; document.getElementById('ignore-rule').dispatchEvent(new Event('change')); document.getElementById('delete-ignore').click()");
   await waitFor(() => js("!document.getElementById('save-ignore').disabled"));
   assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), []);
+  await js("document.getElementById('close-settings').click()");
+  assert.equal(await js('document.activeElement.id'), 'open-settings');
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   clearTimeout(timeout);
-  console.log('桌面验证通过：双浏览器、分组勾选、确认关闭、旧规则迁移、命名规则、多域名共用忽略词、改名/新增域名/删除、冲突保护、同步保持编辑与焦点、重载设置及恶意文本处理。');
+  console.log('桌面验证通过：设置入口/返回/Esc、焦点范围与恢复、保留草稿、最小窗口滚动及结果提示、双浏览器、分组勾选、确认关闭、旧规则迁移、多域名规则、同步保持编辑与焦点、重载及恶意文本处理。');
   await rm(temporary, { recursive: true, force: true });
   app.exit(0);
 })().catch((error) => { console.error(error); app.exit(1); });

@@ -11,9 +11,9 @@ let ignoreRules = [];
 let savingRules = false;
 let initialized = false;
 
-function notice(text, error = false) {
-  $('notice').textContent = text;
-  $('notice').classList.toggle('error', error);
+function notice(text, error = false, id = 'notice') {
+  $(id).textContent = text;
+  $(id).classList.toggle('error', error);
 }
 
 function updateCount() {
@@ -22,7 +22,7 @@ function updateCount() {
   $('close-count').textContent = count;
   const busy = !initialized || closing || savingRules;
   $('close-tabs').disabled = busy || count === 0;
-  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
+  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #open-settings, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
   $('delete-ignore').disabled = busy || $('ignore-rule').value === '-1';
 }
 
@@ -144,6 +144,21 @@ function render() {
 for (const id of ['sort-by', 'direction']) $(id).addEventListener('change', () => {
   overrides.clear(); render(); notice('已按新排序重新预选，请检查候选项。');
 });
+$('open-settings').addEventListener('click', () => {
+  if (!$('settings-dialog').open) $('settings-dialog').showModal();
+});
+$('close-settings').addEventListener('click', () => $('settings-dialog').close());
+$('settings-dialog').addEventListener('keydown', (event) => {
+  if (event.key !== 'Tab') return;
+  const controls = [...$('settings-dialog').querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)')];
+  const first = controls[0];
+  const last = controls.at(-1);
+  // Electron 在原生对话框末项之后会将焦点交给窗口层级。
+  if (document.activeElement === (event.shiftKey ? first : last)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  }
+});
 $('ignore-rule').addEventListener('change', () => editRule(Number($('ignore-rule').value)));
 const lines = (id) => $(id).value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
 $('website-hosts').addEventListener('change', () => {
@@ -160,14 +175,20 @@ async function persistRules(next, index, message) {
   const focusedElement = document.activeElement;
   savingRules = true;
   updateCount();
+  notice('正在保存设置…', false, 'settings-notice');
   try {
     const result = await window.tabTidy.saveIgnoredNames(next);
     if (!result.ok) throw new Error(result.error);
     ignoreRules = result.rules;
     updateRuleChoices(index);
     overrides.clear(); hasCloseResult = false; render();
-    notice(`${message}，已重新分组和预选，请核对候选项。`);
-  } catch (error) { notice(`设置保存失败：${error.message}`, true); }
+    const text = `${message}，已重新分组和预选，请核对候选项。`;
+    notice(text);
+    notice(text, false, 'settings-notice');
+  } catch (error) {
+    notice(`设置保存失败：${error.message}`, true);
+    notice(`设置保存失败：${error.message}`, true, 'settings-notice');
+  }
   finally {
     savingRules = false; updateCount();
     if (document.activeElement === document.body) focusedElement?.focus({ preventScroll: true });
