@@ -1,0 +1,67 @@
+body {
+  width:300px;
+  margin:0;
+  padding:23px;
+  font:13px/1.7 "Segoe UI","Microsoft YaHei",sans-serif;
+  color:#36503b;
+  background:#f6f8f3
+}
+.brand {
+  font-size:22px;
+  color:#32604a;
+  font-weight:700
+}
+h1 {
+  font-size:16px;
+  margin:15px 0 8px
+}
+p,small {
+  color:#809079
+}
+label {
+  display:block;
+  font-size:12px;
+  margin:18px 0 6px
+}
+input {
+  box-sizing:border-box;
+  width:100%;
+  padding:10px;
+  border:1px solid #d5dfce;
+  border-radius:7px;
+  font:inherit;
+  background:white
+}
+button {
+  width:100%;
+  border:0;
+  border-radius:7px;
+  padding:11px;
+  background:#32644c;
+  color:white;
+  margin-top:12px;
+  cursor:pointer;
+  font:inherit
+}
+button:disabled {
+  opacity:.5
+}
+input:focus-visible,button:focus-visible {
+  outline:3px solid #9fb999;
+  outline-offset:2px
+}
+#status {
+  font-size:12px;
+  margin:12px 0;
+  color:#526f45
+}
+#status.error {
+  color:#a25337
+}
+small {
+  display:block;
+  font-size:10px;
+  border-top:1px solid #dde5d5;
+  padding-top:13px;
+  margin-top:16px
+}

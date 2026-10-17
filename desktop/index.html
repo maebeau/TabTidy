@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>TabTidy</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="renderer.js"></script>
+</head>
+<body>
+  <aside>
+    <div class="brand"><span class="brand-icon" aria-hidden="true">▤</span><span>TabTidy<small>给标签页一点秩序</small></span></div>
+    <div class="section-label">浏览器连接</div>
+    <div id="sources"><p class="muted">等待浏览器同步</p></div>
+    <details id="setup" open>
+      <summary>连接 Chrome / Edge</summary>
+      <ol>
+        <li>打开扩展文件夹。</li>
+        <li>在浏览器扩展管理页开启开发者模式，选择“加载已解压的扩展”，选中该文件夹。</li>
+        <li>点击扩展图标，粘贴下方连接码并同步。</li>
+      </ol>
+      <p class="address">Chrome：chrome://extensions<br>Edge：edge://extensions</p>
+      <button id="open-extension" class="secondary">打开扩展文件夹</button>
+      <label class="code-label" for="connection-code">本机连接码</label>
+      <input id="connection-code" readonly type="password" aria-label="本机连接码">
+      <button id="copy-code" class="secondary">复制连接码</button>
+    </details>
+    <div class="sidebar-foot"><span class="local-dot"></span>仅在本机处理<br><small>扩展只读取标签页标题和网址</small></div>
+  </aside>
+  <main>
+    <header><div><div class="eyebrow">你的浏览空间</div><h1>相似标签页</h1><p class="muted">把相似的放在一起，决定权留给你。</p></div><span class="read-only">只读浏览器</span></header>
+    <section class="stats" aria-label="标签页统计">
+      <div><strong id="tab-count">0</strong><span>已同步标签页</span></div>
+      <div><strong id="group-count">0</strong><span>相似分组</span></div>
+      <div><strong id="selected-count">0</strong><span>人工确认候选</span></div>
+    </section>
+    <section class="toolbar" aria-label="排序和导出">
+      <div class="sort-controls"><label for="sort-by">组内排序</label><select id="sort-by"><option value="natural">自然排序</option><option value="time">打开时间</option></select><label class="sr-only" for="direction">排序方向</label><select id="direction"><option value="desc">降序 · 较大 / 较新优先</option><option value="asc">升序 · 较小 / 较旧优先</option></select></div>
+      <button id="export" disabled>导出已选项 <span id="export-count">0</span></button>
+    </section>
+    <p id="sort-note" class="note">每组首项建议保留，其余自动预选；你可以随时调整。更换排序会重新预选。</p>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <section id="groups" aria-label="相似标签页分组"></section>
+    <section id="empty" class="empty"><div class="empty-icon" aria-hidden="true">▤</div><h2>让散落的标签页，重新有序</h2><p>连接 Chrome 或 Edge 后，相似标题会自动归组。<br>不用关闭浏览器，也不用先整理标签页。</p><button id="show-setup" class="secondary">查看连接步骤</button></section>
+    <footer>候选分组仅供人工检查。勾选和导出都不会关闭标签页。<span>TabTidy · Desktop</span></footer>
+  </main>
+  <template id="group-template"><article class="group"><div class="group-header"><div><span class="group-index"></span><strong class="group-title"></strong><span class="group-size"></span></div><span class="group-reason"></span></div><div class="group-tabs"></div></article></template>
+  <template id="tab-template"><label class="tab-row"><input type="checkbox"><span class="tab-content"><span class="tab-title"></span><span class="tab-url"></span></span><span class="tab-meta"><span class="browser-label"></span><span class="tab-time"></span></span></label></template>
+</body>
+</html>

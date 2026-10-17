@@ -3,12 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "desktop/main.js",
   "exports": "./src/core.js",
   "scripts": {
-    "test": "node --test",
-    "demo": "node cli.js examples/tabs.json"
+    "test": "node --test test/*.test.js",
+    "demo": "node cli.js examples/tabs.json",
+    "start": "electron .",
+    "package:win": "node scripts/package-windows.js",
+    "test:desktop": "electron test/desktop-smoke.cjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.9.0"
   }
 }

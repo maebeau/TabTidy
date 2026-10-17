@@ -2,11 +2,51 @@
 
 找出重复网址和相似标题，按自然顺序或打开时间排列，输出供人工确认的预选结果。
 
-当前是独立 JavaScript core，使用 Node.js 22+，无第三方依赖。接收 JSON 清单，不访问浏览器、不关闭标签页。
+提供 Windows 桌面应用、Chrome / Edge 配套扩展，以及独立 JavaScript core。core 本身无第三方依赖；桌面运行与打包使用 Electron。
+
+## Windows 桌面版
+
+面向 Windows 10/11 x64，便携版解压后运行 `TabTidy.exe`。保留整个应用文件夹，不能只复制 exe。个人测试版尚未代码签名，Windows 可能提示发布者未知。
+
+首次连接，每个浏览器各做一次：
+
+1. 打开桌面应用，点击左侧“打开扩展文件夹”。
+2. Chrome 打开 `chrome://extensions`；Edge 打开 `edge://extensions`，开启“开发者模式”。
+3. 点击“加载已解压的扩展”（Edge 可能显示“加载解压缩的扩展”），选择刚才打开的 `browser-extension` 文件夹。
+4. 回到桌面应用，点击“复制连接码”；再点击浏览器工具栏中的 TabTidy 扩展，粘贴连接码并选择“连接并同步标签页”。
+
+在桌面端查看候选组、调整排序、人工勾选，再“导出已选项”。所有操作均不会关闭浏览器中的标签页。
+
+扩展只读取普通窗口的标题、网址和标签页编号，仅发往本机 `127.0.0.1:37843`；不读取页面正文、Cookie、历史记录，不采集隐身窗口。连接码保存在本机用户配置及扩展存储中，请勿分享。
+
+首次同步后，标签页创建、关闭、标题或网址变化会触发更新。桌面应用重启后，请在扩展弹窗再次点击同步。来源卡片显示的是最近同步快照及时间；浏览器退出时的最后状态不保证送达，不能把旧快照当作仍然打开的实时列表。
+
+浏览器无法提供可靠的原始打开时间，配套扩展把它标为未知；时间排序仍可使用，但这些组不会自动预选。同步时间仅用于显示来源状态。后续同步会保留手动勾选，主动切换排序则重新预选。
+
+### 从源码运行与打包
+
+开发环境需要 Node.js 22.12+：
+
+```sh
+npm ci
+npm start
+npm run package:win
+```
+
+Windows 便携文件夹输出至 `dist/TabTidy-win32-x64/`，扩展位于其中的 `resources/browser-extension/`。如果 npm 的安全策略跳过 Electron 安装脚本，可执行 `node node_modules/electron/install.js` 完成运行时下载。
+
+测试：
+
+```sh
+npm test
+npm run test:desktop
+```
+
+桌面测试启动真实 Electron 窗口，使用模拟浏览器接口/同步数据验证交互；不等同于 Windows 实机 Chrome / Edge 的安装验证。
 
 ## 运行
 
-无需安装依赖，在项目目录运行：
+只使用独立 core 或 CLI 时无需安装桌面依赖，在项目目录运行：
 
 ```sh
 npm test
@@ -73,4 +113,4 @@ const groups = analyzeTabs([
 
 ## 本地任务记录
 
-本次范围见 `.scratch/core/spec.md`，任务见 `.scratch/core/issues/01-core.md`。代理配置入口为 `AGENTS.md`，术语见 `GLOSSARY.md`。
+core 范围见 `.scratch/core/spec.md`；桌面版范围见 `.scratch/desktop/spec.md`，任务位于对应 `issues/` 目录。代理配置入口为 `AGENTS.md`，术语见 `GLOSSARY.md`。
