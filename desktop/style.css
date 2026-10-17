@@ -73,7 +73,7 @@ aside {
 .brand small {
   display:block;
   font-size:11px;
-  color:#728474;
+  color:#5d6c54;
   font-weight:400;
   letter-spacing:1.3px;
   margin-top:5px
@@ -81,14 +81,14 @@ aside {
 .section-label,.eyebrow {
   font-size:11px;
   letter-spacing:1.5px;
-  color:#7d8c7c;
+  color:#5d6c54;
   text-transform:uppercase
 }
 .section-label {
   margin-bottom:14px
 }
 .muted {
-  color:#7b897d;
+  color:#5d6c54;
   line-height:1.7;
   margin:6px 0 0
 }
@@ -107,7 +107,7 @@ aside {
 }
 .source small {
   display:block;
-  color:#7c897b;
+  color:#5d6c54;
   margin-top:5px;
   font-size:11px
 }
@@ -122,14 +122,14 @@ summary {
 }
 ol {
   padding-left:20px;
-  color:#667565;
+  color:#5d6c54;
   font-size:12px;
   line-height:1.8
 }
 .address {
   font-size:10px;
   line-height:1.9;
-  color:#758272;
+  color:#5d6c54;
   overflow-wrap:anywhere
 }
 aside button {
@@ -140,7 +140,7 @@ aside button {
 .code-label {
   display:block;
   font-size:11px;
-  color:#7a8876;
+  color:#5d6c54;
   margin:17px 0 7px
 }
 #connection-code {
@@ -154,12 +154,12 @@ aside button {
 .sidebar-foot {
   margin-top:auto;
   padding-top:28px;
-  color:#687d65;
+  color:#5d6c54;
   font-size:12px;
   line-height:1.9
 }
 .sidebar-foot small {
-  color:#8b9785;
+  color:#5d6c54;
   font-size:10px
 }
 .local-dot {
@@ -189,7 +189,7 @@ h1 {
 .read-only {
   font-size:11px;
   border:1px solid #dae4d6;
-  color:#7a8c74;
+  color:#5d6c54;
   padding:7px 10px;
   border-radius:20px
 }
@@ -211,7 +211,7 @@ h1 {
 }
 .stats span {
   font-size:11px;
-  color:#81907b
+  color:#5d6c54
 }
 .toolbar {
   display:flex;
@@ -228,7 +228,7 @@ h1 {
   flex-wrap:wrap
 }
 .sort-controls label {
-  color:#7d8c77;
+  color:#5d6c54;
   margin-right:3px
 }
 select {
@@ -251,7 +251,7 @@ select {
 }
 .note {
   font-size:11px;
-  color:#84907f;
+  color:#5d6c54;
   margin:13px 0 20px;
   line-height:1.7
 }
@@ -294,7 +294,7 @@ select {
 }
 .group-index {
   font-size:10px;
-  color:#98a58d;
+  color:#5d6c54;
   border:1px solid #e0e7d9;
   border-radius:4px;
   padding:3px 6px
@@ -307,7 +307,7 @@ select {
   max-width:360px
 }
 .group-size,.group-reason {
-  color:#8b9983;
+  color:#5d6c54;
   font-size:10px;
   white-space:nowrap
 }
@@ -350,7 +350,7 @@ select {
 }
 .tab-url {
   font-size:10px;
-  color:#9ba591;
+  color:#5d6c54;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
@@ -363,13 +363,13 @@ select {
   gap:6px;
   flex-shrink:0;
   font-size:10px;
-  color:#94a08b
+  color:#5d6c54
 }
 .browser-label {
   padding:3px 7px;
   border-radius:5px;
   background:#f0f3ec;
-  color:#6b805d
+  color:#5d6c54
 }
 .tab-time {
   font-size:9px
@@ -379,7 +379,7 @@ select {
   padding:68px 12px 95px
 }
 .empty-icon {
-  color:#a7b69b;
+  color:#5d6c54;
   background:#edf2e8;
   font-size:38px;
   border-radius:18px;
@@ -389,12 +389,12 @@ select {
 .empty h2 {
   font-size:19px;
   font-weight:500;
-  color:#697b5e;
+  color:#5d6c54;
   margin-top:23px
 }
 .empty p {
   font-size:12px;
-  color:#95a08a;
+  color:#5d6c54;
   line-height:2
 }
 .empty button {
@@ -410,7 +410,7 @@ footer {
   margin-top:24px;
   display:flex;
   justify-content:space-between;
-  color:#9aa48e;
+  color:#5d6c54;
   font-size:10px;
   gap:15px
 }

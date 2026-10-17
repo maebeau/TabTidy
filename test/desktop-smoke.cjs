@@ -40,9 +40,21 @@ async function waitFor(check) {
   await post('chrome-test', 'Chrome', tabs);
   await waitFor(() => js("document.getElementById('selected-count').textContent === '1'"));
   assert.equal(await js("document.querySelectorAll('.group').length"), 1);
-  await js("document.querySelector('.tab-row input').click()");
+  await js("document.querySelector('.tab-row input').focus(); document.querySelector('.tab-row input').click()");
+  tabs[1].title += '（校对）';
   await post('chrome-test', 'Chrome', tabs);
-  await waitFor(() => js("document.getElementById('selected-count').textContent === '2'"));
+  await waitFor(() => js("document.getElementById('groups').textContent.includes('（校对）')"));
+  assert.equal(await js("document.activeElement?.dataset.tabId"), 'chrome-test:11', '同步后应保留当前标签页的键盘焦点');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '2');
+  const contrastColors = await js("['.tab-url', '.tab-time', '.note', '.source small', '.muted'].map(selector => ({ selector, color: getComputedStyle(document.querySelector(selector)).color }))");
+  const luminance = (rgb) => rgb.map((value) => value / 255).map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+    .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+  for (const { selector, color } of contrastColors) {
+    const foreground = luminance(color.match(/\d+/g).slice(0, 3).map(Number));
+    for (const background of [[255, 255, 255], [242, 247, 236], [246, 247, 244]]) {
+      assert.ok((luminance(background) + 0.05) / (foreground + 0.05) >= 4.5, `${selector} 文字对比度应至少为 4.5:1`);
+    }
+  }
   await js("document.getElementById('sort-by').value='time'; document.getElementById('sort-by').dispatchEvent(new Event('change'))");
   assert.equal(await js("document.getElementById('selected-count').textContent"), '0');
   await js("document.getElementById('sort-by').value='natural'; document.getElementById('direction').value='asc'; document.getElementById('sort-by').dispatchEvent(new Event('change'))");

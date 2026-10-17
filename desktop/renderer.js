@@ -18,6 +18,9 @@ function updateCount() {
 }
 
 function render() {
+  const focusedId = document.activeElement?.dataset.tabId;
+  const scrollPosition = window.scrollY;
+  let focusTarget;
   const tabs = sources.flatMap((source) => source.tabs);
   groups = analyzeTabs(tabs, { sortBy: $('sort-by').value, direction: $('direction').value });
   const activeIds = new Set(tabs.map((tab) => tab.id));
@@ -47,6 +50,8 @@ function render() {
       if (overrides.has(tab.id)) tab.selected = overrides.get(tab.id);
       const row = $('tab-template').content.firstElementChild.cloneNode(true);
       const checkbox = row.querySelector('input');
+      checkbox.dataset.tabId = tab.id;
+      if (tab.id === focusedId) focusTarget = checkbox;
       checkbox.checked = tab.selected;
       checkbox.setAttribute('aria-label', `选择 ${tab.title || '无标题'}`);
       checkbox.addEventListener('change', () => { tab.selected = checkbox.checked; overrides.set(tab.id, tab.selected); updateCount(); });
@@ -65,6 +70,8 @@ function render() {
     ? '浏览器无法提供可靠的原始打开时间。未知时间排在末尾，该组不自动预选。'
     : '每组首项建议保留，其余自动预选；你可以随时调整。更换排序会重新预选。';
   updateCount();
+  window.scrollTo(0, scrollPosition);
+  focusTarget?.focus({ preventScroll: true });
 }
 
 for (const id of ['sort-by', 'direction']) $(id).addEventListener('change', () => {
