@@ -273,6 +273,33 @@ h1 {
   color:#5d6c54;
   margin-right:3px
 }
+#group-filter {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:9px;
+  margin-top:18px;
+  font-size:12px
+}
+#group-filter label {
+  color:#5d6c54
+}
+#group-filter input {
+  width:76px;
+  min-width:0;
+  padding:9px;
+  border:1px solid #dce3d7;
+  border-radius:7px;
+  color:#41573d;
+  background:white
+}
+#group-filter button {
+  padding:9px 12px;
+  font-size:12px
+}
+#group-filter-note {
+  margin-bottom:0
+}
 .preselect-toggle {
   display:flex;
   align-items:center;

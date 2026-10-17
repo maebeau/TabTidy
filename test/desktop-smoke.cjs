@@ -110,6 +110,73 @@ async function waitFor(check) {
     }).catch((error) => { if (!stop.signal.aborted) throw error; });
     return { done, stop };
   };
+  const rangeTabs = (name, count, start) => Array.from({ length: count }, (_, index) => ({ id: start + index,
+    title: `${name} 第${index + 1}章`, url: `https://example.com/range/${start + index}` }));
+  const smallGroup = rangeTabs('远山', 2, 200);
+  const mediumGroup = rangeTabs('深海', 3, 300);
+  const largeGroup = rangeTabs('星河', 5, 500);
+  const chromeRangeTabs = [...smallGroup, ...mediumGroup, { id: 900, title: '独立页面', url: 'https://example.com/single' }];
+  const applyRange = (min, max = '') => js(`document.getElementById('group-min').value=${JSON.stringify(String(min))}; document.getElementById('group-max').value=${JSON.stringify(String(max))}; document.getElementById('group-min').dispatchEvent(new Event('input')); document.getElementById('group-filter').requestSubmit()`);
+  await post('chrome-test', 'Chrome', chromeRangeTabs);
+  await post('edge-test', 'Edge', largeGroup);
+  await waitFor(() => js("document.getElementById('group-count').textContent === '3'"));
+  assert.equal(await js("document.getElementById('tab-count').textContent"), '11', '默认沿用全部同步标签页统计');
+  await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:201\"]').click()");
+  await applyRange(3);
+  assert.equal(await js("document.getElementById('group-count').textContent"), '2');
+  assert.equal(await js("document.getElementById('tab-count').textContent"), '8');
+  assert.equal(await js("document.getElementById('tab-count-label').textContent"), '筛选内标签页');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '6', '隐藏分组的勾选不计入关闭数量');
+  const chromeRangeReceiver = await receiveClose('chrome-test', async (command) => {
+    assert.deepEqual(command.tabs.map((tab) => tab.id).sort(), [300, 301]);
+    return command.tabs.map((tab) => ({ id: tab.id, status: 'skipped', error: '模拟端保留标签页' }));
+  });
+  const edgeRangeReceiver = await receiveClose('edge-test', async (command) => {
+    assert.deepEqual(command.tabs.map((tab) => tab.id).sort(), [500, 501, 502, 503]);
+    return command.tabs.map((tab) => ({ id: tab.id, status: 'skipped', error: '模拟端保留标签页' }));
+  });
+  const originalConfirm = dialog.showMessageBox;
+  dialog.showMessageBox = async (_window, options) => {
+    assert.ok(options.message.includes('6 个'));
+    assert.ok(!options.detail.includes('远山'), '确认清单不得包含被数量筛选隐藏的分组');
+    assert.equal(await js("Array.from(document.querySelectorAll('#group-filter input, #group-filter button')).every(control => control.disabled)"), true, '关闭期间禁用数量筛选');
+    return { response: 1 };
+  };
+  await js("document.getElementById('close-tabs').click()");
+  await Promise.all([chromeRangeReceiver.done, edgeRangeReceiver.done]);
+  await waitFor(() => js("document.getElementById('notice').textContent.includes('跳过 6 个') && !document.getElementById('group-min').disabled"));
+  dialog.showMessageBox = originalConfirm;
+  received.length = 0;
+  await applyRange(4, 4);
+  assert.equal(await js("document.querySelectorAll('.group').length"), 0);
+  assert.equal(await js("document.getElementById('close-tabs').disabled"), true);
+  assert.equal(await js("document.querySelector('#empty h2').textContent"), '没有符合项数条件的分组');
+  assert.equal(await js("document.getElementById('show-setup').hidden"), true);
+  await applyRange(6, 3);
+  assert.equal(await js("document.getElementById('group-max').validity.customError"), true);
+  assert.ok((await js("document.getElementById('group-filter-note').textContent")).includes('4–4'), '无效范围不得替换已应用的条件');
+  await applyRange(2.5);
+  assert.equal(await js("document.getElementById('group-min').validity.stepMismatch"), true, '只允许整数项数');
+  await applyRange(2, 3);
+  assert.equal(await js("document.getElementById('group-count').textContent"), '2');
+  assert.equal(await js("document.getElementById('tab-count').textContent"), '5');
+  await applyRange(2, 2);
+  assert.equal(await js("document.querySelectorAll('.tab-row').length"), 2);
+  assert.equal(await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:201\"]').checked"), true, '隐藏后重新显示应保留手动勾选');
+  await post('chrome-test', 'Chrome', [...chromeRangeTabs, ...rangeTabs('远山', 1, 202)]);
+  await waitFor(() => js("document.getElementById('group-count').textContent === '0'"));
+  await post('chrome-test', 'Chrome', chromeRangeTabs);
+  await waitFor(() => js("document.getElementById('group-count').textContent === '1'"));
+  await js("document.getElementById('source-filter').value='edge-test'; document.getElementById('source-filter').dispatchEvent(new Event('change'))");
+  assert.equal(await js("document.getElementById('group-count').textContent"), '0', '数量条件应与浏览器来源一起生效');
+  await js("document.getElementById('source-filter').value=''; document.getElementById('source-filter').dispatchEvent(new Event('change')); document.querySelector('#group-filter button[type=reset]').click()");
+  assert.equal(await js("document.getElementById('group-count').textContent"), '3');
+  assert.equal(await js("document.getElementById('tab-count').textContent"), '11');
+  assert.deepEqual(await js("[document.getElementById('group-min').value, document.getElementById('group-max').value]"), ['2', '']);
+  assert.equal(await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:201\"]').checked"), true);
+  await post('chrome-test', 'Chrome', []);
+  await post('edge-test', 'Edge', []);
+  await waitFor(() => js("document.getElementById('tab-count').textContent === '0'"));
   const tabs = [
     { id: 10, title: '星河旅行 1-20 整理版', url: 'https://example.com/novel/20' },
     { id: 11, title: '星河旅行 1-30 更新版', url: 'https://example.com/novel/30' },
@@ -182,17 +249,22 @@ async function waitFor(check) {
   assert.equal(await js("document.getElementById('settings-dialog').matches(':modal')"), true);
   assert.equal(await js('document.activeElement.id'), 'close-settings');
   window.focus();
+  // 输入事件异步送达，等待焦点变化后再发下一次 Tab。
   for (let index = 0; index < 12; index++) {
+    await js('window.focusBeforeTab = document.activeElement');
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+    await waitFor(() => js("document.activeElement !== window.focusBeforeTab && document.getElementById('settings-dialog').contains(document.activeElement)"));
     assert.equal(await js("document.getElementById('settings-dialog').contains(document.activeElement)"), true, 'Tab 焦点应限制在设置中');
   }
   await js("document.getElementById('close-settings').focus()");
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab', modifiers: ['shift'] });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab', modifiers: ['shift'] });
+  await waitFor(() => js("document.activeElement.classList.contains('delete-rule')"));
   assert.equal(await js("document.activeElement.classList.contains('delete-rule')"), true, 'Shift+Tab 应循环到最后一张卡片的按钮，跳过隐藏表单');
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+  await waitFor(() => js("document.activeElement.id === 'close-settings'"));
   assert.equal(await js('document.activeElement.id'), 'close-settings', 'Tab 应从末项循环到首项');
   await js("document.getElementById('ignore-nav').click()");
   assert.equal(await js('document.activeElement.id'), 'ignore-title');
@@ -202,6 +274,7 @@ async function waitFor(check) {
   await js("document.getElementById('cancel-rule').focus()");
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+  await waitFor(() => js("document.activeElement.id === 'close-settings'"));
   assert.equal(await js('document.activeElement.id'), 'close-settings', '表单模式下焦点应跳过隐藏卡片');
   await js("document.getElementById('close-settings').click()");
   assert.equal(await js("document.getElementById('settings-dialog').open"), false);
@@ -412,7 +485,7 @@ async function waitFor(check) {
   await writeFile('artifacts/auto-preselect-preview.png', (await window.webContents.capturePage()).toPNG());
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   clearTimeout(timeout);
-  console.log('桌面验证通过：浏览器来源选择、连接状态更新与焦点保留、关闭来源隔离、回到顶部、键盘激活及减少动态效果、自动预选开关、手动覆盖、同步/排序/规则保存保留选择、开关记忆、设置分栏和规则卡片、键盘焦点、最小窗口、双浏览器、分组勾选、确认关闭、迁移及恶意文本处理。');
+  console.log('桌面验证通过：分组项数上下限、无效范围、筛选内统计、隐藏分组关闭隔离与选择保留、来源联合筛选、浏览器来源选择、连接状态更新与焦点保留、回到顶部、键盘激活及减少动态效果、自动预选开关、手动覆盖、同步/排序/规则保存保留选择、开关记忆、设置分栏和规则卡片、键盘焦点、最小窗口、双浏览器、分组勾选、确认关闭、迁移及恶意文本处理。');
   await rm(temporary, { recursive: true, force: true });
   app.exit(0);
 })().catch((error) => { console.error(error); app.exit(1); });

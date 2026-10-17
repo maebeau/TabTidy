@@ -12,6 +12,7 @@ let savingRules = false;
 let initialized = false;
 let editingRule = null;
 let autoPreselect = true;
+let groupRange = { min: 2, max: Infinity };
 
 function updateBackToTop() {
   $('back-to-top').hidden = window.scrollY <= 300;
@@ -34,7 +35,7 @@ function updateCount() {
   $('close-count').textContent = count;
   const busy = !initialized || closing || savingRules;
   $('close-tabs').disabled = busy || count === 0;
-  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #auto-preselect, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
+  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #auto-preselect, #group-filter input, #group-filter button, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
   $('source-filter').disabled = busy || sources.length === 0;
 }
 
@@ -169,11 +170,14 @@ function render() {
   const allTabs = sources.flatMap((source) => source.tabs);
   const tabs = sources.filter((source) => !$('source-filter').value || source.sourceId === $('source-filter').value).flatMap((source) => source.tabs);
   const ignoredNamesByHost = Object.fromEntries(ignoreRules.flatMap((rule) => rule.domains.map((host) => [host, rule.ignoredNames])));
-  groups = analyzeTabs(tabs, { sortBy: $('sort-by').value, direction: $('direction').value, ignoredNamesByHost });
+  groups = analyzeTabs(tabs, { sortBy: $('sort-by').value, direction: $('direction').value, ignoredNamesByHost })
+    .filter((group) => group.tabs.length >= groupRange.min && group.tabs.length <= groupRange.max);
+  const filtering = groupRange.min > 2 || groupRange.max !== Infinity;
   updateWebsiteChoices(allTabs);
   const activeIds = new Set(allTabs.map((tab) => tab.id));
   for (const id of overrides.keys()) if (!activeIds.has(id)) overrides.delete(id);
-  $('tab-count').textContent = tabs.length;
+  $('tab-count').textContent = filtering ? groups.reduce((count, group) => count + group.tabs.length, 0) : tabs.length;
+  $('tab-count-label').textContent = filtering ? '筛选内标签页' : '已同步标签页';
   $('group-count').textContent = groups.length;
   $('groups').replaceChildren();
   groups.forEach((group, index) => {
@@ -220,8 +224,11 @@ function render() {
     $('groups').append(card);
   });
   $('empty').hidden = groups.length > 0;
-  $('empty').querySelector('h2').textContent = sources.length ? '暂未找到需要一起检查的标签页' : '让散落的标签页，重新有序';
-  $('empty').querySelector('p').textContent = sources.length ? '新的标签页同步后，会自动重新检查。' : '连接 Chrome 或 Edge 后，相似标题会自动归组。';
+  $('empty').querySelector('h2').textContent = !sources.length ? '让散落的标签页，重新有序' : filtering ? '没有符合项数条件的分组' : '暂未找到需要一起检查的标签页';
+  $('empty').querySelector('p').textContent = !sources.length ? '连接 Chrome 或 Edge 后，相似标题会自动归组。' : filtering ? '调整每组项数范围，或点击“重置”查看全部分组。' : '新的标签页同步后，会自动重新检查。';
+  $('show-setup').hidden = filtering && sources.length > 0;
+  const range = !filtering ? '全部分组' : groupRange.max === Infinity ? `每组至少 ${groupRange.min} 项` : `每组 ${groupRange.min}–${groupRange.max} 项`;
+  $('group-filter-note').textContent = `当前：${range}。项数包含建议保留项；仅关闭当前显示分组中的勾选项。`;
   $('auto-preselect').setAttribute('aria-checked', String(autoPreselect));
   $('auto-preselect-state').textContent = autoPreselect ? '开' : '关';
   $('sort-note').textContent = !autoPreselect
@@ -235,6 +242,26 @@ function render() {
   focusTarget?.focus({ preventScroll: true });
 }
 
+$('group-filter').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const min = $('group-min').valueAsNumber;
+  const max = $('group-max').value === '' ? Infinity : $('group-max').valueAsNumber;
+  if (max < min) {
+    $('group-max').setCustomValidity('最多项数不能小于最少项数。');
+    $('group-max').reportValidity();
+    return;
+  }
+  groupRange = { min, max };
+  render();
+  notice('已按每组项数筛选，隐藏分组的手动勾选已保留；关闭仅作用于当前显示的分组。');
+});
+for (const id of ['group-min', 'group-max']) $(id).addEventListener('input', () => $('group-max').setCustomValidity(''));
+$('group-filter').addEventListener('reset', () => {
+  groupRange = { min: 2, max: Infinity };
+  $('group-max').setCustomValidity('');
+  render();
+  notice('已重置项数筛选，显示当前浏览器来源的全部分组；手动勾选已保留。');
+});
 $('source-filter').addEventListener('change', () => {
   window.scrollTo(0, 0);
   render();
