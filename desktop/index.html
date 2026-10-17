@@ -10,73 +10,60 @@
 </head>
 <body>
   <aside>
-    <div class="brand"><span class="brand-icon" aria-hidden="true">▤</span><span>TabTidy<small>给标签页一点秩序</small></span></div>
-    <div class="section-label">浏览器连接</div>
-    <label class="source-filter-label" for="source-filter">查看来源</label>
+    <div class="brand"><span class="brand-icon" aria-hidden="true">▤</span><span>TabTidy</span></div>
+    <label class="source-filter-label" for="source-filter">浏览器</label>
     <select id="source-filter" disabled><option value="">全部浏览器</option></select>
     <div id="sources"><p class="muted">等待浏览器同步</p></div>
     <details id="setup" open>
-      <summary>首次配对 Chrome / Edge</summary>
-      <ol>
-        <li>打开扩展文件夹。</li>
-        <li>在浏览器扩展管理页开启开发者模式，选择“加载已解压的扩展”，选中该文件夹。</li>
-        <li>点击扩展图标，粘贴下方连接码并同步。</li>
-      </ol>
-      <p class="note">配对一次，以后自动连接。桌面端暂未打开时，扩展会自动重试。</p>
-      <p class="address">Chrome：chrome://extensions<br>Edge：edge://extensions</p>
+      <summary>扩展与连接</summary>
       <button id="open-extension" class="secondary">打开扩展文件夹</button>
+      <ol>
+        <li>在浏览器扩展页开启开发者模式，加载此文件夹。</li>
+        <li>复制连接码，在扩展中配对一次。</li>
+      </ol>
+      <p class="address">Chrome：chrome://extensions<br>Edge：edge://extensions</p>
       <label class="code-label" for="connection-code">本机连接码</label>
-      <input id="connection-code" readonly type="password" aria-label="本机连接码">
-      <button id="copy-code" class="secondary">复制连接码</button>
+      <div class="code-actions"><input id="connection-code" readonly type="password" aria-label="本机连接码"><button id="copy-code" class="secondary" aria-label="复制连接码">复制</button></div>
+      <p class="note">配对后自动连接。</p>
     </details>
-    <div class="sidebar-foot"><span class="local-dot"></span>仅在本机处理<br><small>扩展只读取标签页标题和网址</small></div>
+    <div class="sidebar-foot"><span class="local-dot"></span>本机处理</div>
   </aside>
   <main>
-    <header><div><div class="eyebrow">你的浏览空间</div><h1 id="page-title" tabindex="-1">相似标签页</h1><p class="muted">把相似的放在一起，决定权留给你。</p></div><div class="header-actions"><span class="manual-confirm">人工确认后关闭</span><button id="open-settings" class="secondary icon-button" type="button" aria-label="设置" title="设置" aria-haspopup="dialog" aria-controls="settings-dialog" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l.6 2.3 1.6.9 2.3-.6 3 5.2-1.7 1.7v1.8l1.7 1.7-3 5.2-2.3-.6-1.6.9L15 24H9l-.6-2.3-1.6-.9-2.3.6-3-5.2 1.7-1.7v-1.8L1.5 11l3-5.2 2.3.6 1.6-.9L9 3Z" transform="translate(1 0) scale(.9)"/><circle cx="12" cy="12" r="3"/></svg></button></div></header>
-    <section class="stats" aria-label="标签页统计">
-      <div><strong id="tab-count">0</strong><span id="tab-count-label">已同步标签页</span></div>
-      <div><strong id="group-count">0</strong><span>相似分组</span></div>
-      <div><strong id="selected-count">0</strong><span>人工确认候选</span></div>
+    <header>
+      <div><h1 id="page-title" tabindex="-1">相似标签页</h1><div class="stats" aria-label="标签页统计"><span><strong id="tab-count">0</strong> <span id="tab-count-label">标签页</span></span><span><strong id="group-count">0</strong> 组</span></div></div>
+      <div class="header-actions"><button id="close-tabs" title="核对弹窗后关闭当前显示分组中的勾选项" disabled>关闭已选 <span id="selected-count">0</span></button><button id="open-settings" class="secondary icon-button" type="button" aria-label="设置" title="设置" aria-haspopup="dialog" aria-controls="settings-dialog" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l.6 2.3 1.6.9 2.3-.6 3 5.2-1.7 1.7v1.8l1.7 1.7-3 5.2-2.3-.6-1.6.9L15 24H9l-.6-2.3-1.6-.9-2.3.6-3-5.2 1.7-1.7v-1.8L1.5 11l3-5.2 2.3.6 1.6-.9L9 3Z" transform="translate(1 0) scale(.9)"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+    </header>
+    <section class="toolbar" aria-label="排序和筛选">
+      <div class="sort-controls"><label class="sr-only" for="sort-by">组内排序</label><select id="sort-by"><option value="natural">自然排序</option><option value="time">打开时间</option></select><label class="sr-only" for="direction">排序方向</label><select id="direction"><option value="desc">降序</option><option value="asc">升序</option></select><button id="auto-preselect" class="secondary preselect-toggle" type="button" role="switch" aria-checked="true" aria-label="自动预选" aria-describedby="sort-note" title="按排序保留每组首项，预选其余项；切换排序会重新预选。" disabled><span class="switch-track" aria-hidden="true"></span><span>自动预选</span></button></div>
+      <form id="group-filter" aria-label="按每组项数筛选" aria-describedby="group-filter-help">
+        <span>每组</span><label class="sr-only" for="group-min">最少项数</label><input id="group-min" type="number" min="2" step="1" value="2" required inputmode="numeric" title="最少项数" disabled><span aria-hidden="true">–</span><label class="sr-only" for="group-max">最多项数</label><input id="group-max" type="number" min="2" step="1" placeholder="不限" inputmode="numeric" title="最多项数，留空表示不限" disabled><span>项</span>
+        <button type="submit" class="secondary" disabled>筛选</button><button type="reset" class="secondary icon-button" aria-label="重置项数筛选" title="重置项数筛选" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4v6h6M3 10a9 9 0 1 1 2 9"/></svg></button>
+      </form>
     </section>
-    <section class="toolbar" aria-label="排序和关闭">
-      <div class="sort-controls"><label for="sort-by">组内排序</label><select id="sort-by"><option value="natural">自然排序</option><option value="time">打开时间</option></select><label class="sr-only" for="direction">排序方向</label><select id="direction"><option value="desc">降序 · 较大 / 较新优先</option><option value="asc">升序 · 较小 / 较旧优先</option></select></div>
-      <button id="auto-preselect" class="secondary preselect-toggle" type="button" role="switch" aria-checked="true" aria-label="自动预选" aria-describedby="sort-note" title="开启或关闭按排序自动预选" disabled><span class="switch-track" aria-hidden="true"></span><span>自动预选</span><span id="auto-preselect-state" aria-hidden="true">开</span></button>
-      <button id="close-tabs" title="确认后关闭浏览器中已勾选的标签页" disabled>关闭已选标签页 <span id="close-count">0</span></button>
-    </section>
-    <form id="group-filter" aria-label="按每组项数筛选" aria-describedby="group-filter-note">
-      <span>每组项数</span>
-      <label for="group-min">最少</label><input id="group-min" type="number" min="2" step="1" value="2" required inputmode="numeric" disabled>
-      <label for="group-max">最多</label><input id="group-max" type="number" min="2" step="1" placeholder="不限" inputmode="numeric" disabled>
-      <button type="submit" class="secondary" disabled>应用筛选</button><button type="reset" class="secondary" disabled>重置</button>
-    </form>
-    <p id="group-filter-note" class="note">当前：全部分组。项数包含建议保留项。</p>
-    <p id="sort-note" class="note">每组首项建议保留，其余自动预选；你可以随时调整。更换排序会重新预选。</p>
+    <span id="group-filter-help" class="sr-only">项数包含建议保留项；上限留空表示不限，点击筛选后生效。</span>
+    <div class="control-notes"><p id="group-filter-note" class="note" role="status"></p><p id="sort-note" class="sr-only">按排序保留每组首项，预选其余项；切换排序会重新预选。</p></div>
     <div id="notice" role="status" aria-live="polite"></div>
     <section id="groups" aria-label="相似标签页分组"></section>
-    <section id="empty" class="empty"><div class="empty-icon" aria-hidden="true">▤</div><h2>让散落的标签页，重新有序</h2><p>连接 Chrome 或 Edge 后，相似标题会自动归组。<br>不用关闭浏览器，也不用先整理标签页。</p><button id="show-setup" class="secondary">查看连接步骤</button></section>
-    <footer>勾选不会立即关闭。核对后点击关闭，并在弹窗确认。<span>TabTidy · Desktop</span></footer>
+    <section id="empty" class="empty"><h2>等待浏览器连接</h2><p class="muted">首次配对后自动连接。</p><button id="show-setup" class="secondary">连接浏览器</button></section>
   </main>
   <button id="back-to-top" class="icon-button" type="button" aria-label="回到顶部" title="回到顶部" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-7 7 7-7 7 7"/></svg></button>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
-    <div class="settings-header"><h2 id="settings-title">设置</h2><button id="close-settings" class="secondary" type="button" autofocus>返回标签页</button></div>
+    <div class="settings-header"><h2 id="settings-title">设置</h2><button id="close-settings" class="secondary" type="button" autofocus>返回</button></div>
     <div class="settings-layout">
       <nav class="settings-nav" aria-label="设置项">
-        <p class="settings-nav-label">偏好设置</p>
         <button id="ignore-nav" type="button" aria-current="page" aria-controls="ignore-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>忽略规则</button>
-        <p class="settings-local">规则保存在本机<br>设置一次，持续生效</p>
       </nav>
       <div class="settings-content"><section id="ignore-settings" aria-labelledby="ignore-title">
-        <div class="settings-section-header"><div><h3 id="ignore-title" tabindex="-1">网站忽略规则</h3><p class="note">按网站管理公共标题文字，让相似分组更准确。</p></div><button id="add-rule" type="button"><span aria-hidden="true">＋</span> 添加规则</button></div>
+        <div class="settings-section-header"><div class="settings-section-title"><h3 id="ignore-title" tabindex="-1">网站规则</h3><span id="rule-count" class="rule-count"></span></div><button id="add-rule" type="button"><span aria-hidden="true">＋</span> 添加规则</button></div>
         <div id="rule-list">
-          <p id="rule-count" class="rule-count"></p>
           <div id="rule-cards"></div>
-          <div id="rules-empty" class="rules-empty" hidden><span aria-hidden="true">＋</span><h4>还没有忽略规则</h4><p>点击“添加规则”，为网站设置要忽略的名称或板块文字。</p></div>
+          <div id="rules-empty" class="rules-empty" hidden><h4>暂无规则</h4></div>
         </div>
         <section id="rule-editor" aria-labelledby="rule-editor-title" hidden>
           <h4 id="rule-editor-title">添加规则</h4>
           <form id="ignore-form">
-        <label for="ignore-name">名称（仅用于管理）</label>
-        <input id="ignore-name" placeholder="如：某某阅读站" required maxlength="128" autocomplete="off">
+        <label for="ignore-name">名称</label>
+        <input id="ignore-name" placeholder="如：某某阅读站" title="仅用于管理，不会作为忽略词匹配" required maxlength="128" autocomplete="off">
         <div class="rule-form-grid"><div>
         <label for="ignore-domains">域名（每行一个）</label>
         <textarea id="ignore-domains" rows="4" placeholder="old.example.com&#10;new.example.com" required spellcheck="false" aria-describedby="ignore-help"></textarea>
@@ -86,15 +73,15 @@
         <label for="ignore-words">忽略词（每行一个）</label>
         <textarea id="ignore-words" rows="4" placeholder="网站名称&#10;板块名称" required aria-describedby="ignore-help"></textarea>
         </div></div>
-        <p id="ignore-help" class="note">所列域名共用这些忽略词，换域名时追加即可。域名精确匹配，www 等子域名需一并列出。只忽略独立前后缀或括号标签，原始标题保留。</p>
-        <div class="rule-actions"><button id="save-ignore" type="submit">保存并重新分组</button><button id="cancel-rule" class="secondary" type="button">取消</button></div>
+        <p id="ignore-help" class="note">域名精确匹配，www 等子域名请单独添加。只忽略独立前后缀或括号标签，原标题保留。</p>
+        <div class="rule-actions"><button id="save-ignore" type="submit">保存</button><button id="cancel-rule" class="secondary" type="button">取消</button></div>
           </form>
         </section>
       </section></div>
     </div>
     <div id="settings-notice" role="status" aria-live="polite"></div>
   </dialog>
-  <template id="group-template"><article class="group"><div class="group-header"><div><label class="group-select"><input type="checkbox" class="group-checkbox"><span>全选本组</span></label><span class="group-index"></span><strong class="group-title"></strong><span class="group-size"></span></div><span class="group-reason"></span></div><div class="group-tabs"></div></article></template>
+  <template id="group-template"><article class="group"><div class="group-header"><label class="group-select"><input type="checkbox" class="group-checkbox"><strong class="group-title"></strong><span class="group-size"></span></label></div><div class="group-tabs"></div></article></template>
   <template id="tab-template"><label class="tab-row"><input type="checkbox"><span class="tab-content"><span class="tab-title"></span><span class="tab-url"></span></span><span class="tab-meta"><span class="browser-label"></span><span class="tab-time"></span></span></label></template>
 </body>
 </html>

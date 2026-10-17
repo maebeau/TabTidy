@@ -6,7 +6,6 @@ let sources = [];
 let groups = [];
 const overrides = new Map();
 let closing = false;
-let hasCloseResult = false;
 let ignoreRules = [];
 let savingRules = false;
 let initialized = false;
@@ -32,7 +31,6 @@ function notice(text, error = false, id = 'notice') {
 function updateCount() {
   const count = groups.flatMap((group) => group.tabs).filter((tab) => tab.selected).length;
   $('selected-count').textContent = count;
-  $('close-count').textContent = count;
   const busy = !initialized || closing || savingRules;
   $('close-tabs').disabled = busy || count === 0;
   for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #auto-preselect, #group-filter input, #group-filter button, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
@@ -80,7 +78,7 @@ function showRuleList() {
 }
 
 function renderRuleCards() {
-  $('rule-count').textContent = `已保存 ${ignoreRules.length} 条规则`;
+  $('rule-count').textContent = `${ignoreRules.length} 条`;
   $('rules-empty').hidden = ignoreRules.length > 0;
   $('rule-cards').replaceChildren(...ignoreRules.map((rule, index) => {
     const card = document.createElement('article');
@@ -90,10 +88,7 @@ function renderRuleCards() {
     const heading = document.createElement('div');
     const title = document.createElement('h4');
     title.textContent = rule.name;
-    const count = document.createElement('p');
-    count.className = 'rule-card-count';
-    count.textContent = `${rule.domains.length} 个域名 · ${rule.ignoredNames.length} 个忽略词`;
-    heading.append(title, count);
+    heading.append(title);
     const actions = document.createElement('div');
     actions.className = 'rule-card-actions';
     for (const [action, label] of [['edit', '编辑'], ['delete', '删除']]) {
@@ -132,14 +127,18 @@ function renderRuleCards() {
   updateCount();
 }
 
+function sourceLabel(source) {
+  return sources.filter((item) => item.browser === source.browser).length > 1 ? `${source.browser} · ${source.sourceId.slice(0, 6)}` : source.browser;
+}
+
 function renderSources() {
   const filter = $('source-filter');
-  if (filter.options.length !== sources.length + 1 || sources.some((source, index) => filter.options[index + 1]?.value !== source.sourceId)) {
+  if (filter.options.length !== sources.length + 1 || sources.some((source, index) => filter.options[index + 1]?.value !== source.sourceId || filter.options[index + 1]?.textContent !== sourceLabel(source))) {
     const selected = filter.value;
     filter.replaceChildren(filter.options[0], ...sources.map((source) => {
       const option = document.createElement('option');
       option.value = source.sourceId;
-      option.textContent = `${source.browser} · ${source.sourceId.slice(0, 6)}`;
+      option.textContent = sourceLabel(source);
       return option;
     }));
     filter.value = sources.some((source) => source.sourceId === selected) ? selected : '';
@@ -148,14 +147,19 @@ function renderSources() {
   for (const source of sources) {
     const item = document.createElement('div');
     item.className = 'source';
+    item.title = `${source.tabs.length} 个标签页 · 来源 ${source.sourceId} · 上次同步 ${new Date(source.receivedAt).toLocaleTimeString()}`;
+    const heading = document.createElement('div');
+    heading.className = 'source-heading';
     const title = document.createElement('strong');
-    title.textContent = `${source.browser} · ${source.tabs.length} 个标签页`;
-    const time = document.createElement('small');
-    time.textContent = `已同步 ${new Date(source.receivedAt).toLocaleTimeString()} · ${source.sourceId.slice(0, 6)}`;
+    title.textContent = sourceLabel(source);
+    const count = document.createElement('span');
+    count.textContent = source.tabs.length;
+    heading.append(title, count);
     const status = document.createElement('small');
     status.className = 'source-state';
-    status.textContent = !source.sessionId ? '扩展需升级' : source.connected ? '已连接' : '等待重连 · 显示上次同步列表';
-    item.append(title, status, time);
+    status.textContent = !source.sessionId ? '扩展需升级' : source.connected ? '已连接' : '等待重连 · 旧列表';
+    status.dataset.connected = String(source.connected);
+    item.append(heading, status);
     $('sources').append(item);
   }
   if (!sources.length) $('sources').textContent = '等待浏览器同步';
@@ -169,6 +173,7 @@ function render() {
   renderSources();
   const allTabs = sources.flatMap((source) => source.tabs);
   const tabs = sources.filter((source) => !$('source-filter').value || source.sourceId === $('source-filter').value).flatMap((source) => source.tabs);
+  const mixedSources = new Set(tabs.map((tab) => tab.sourceId)).size > 1;
   const ignoredNamesByHost = Object.fromEntries(ignoreRules.flatMap((rule) => rule.domains.map((host) => [host, rule.ignoredNames])));
   groups = analyzeTabs(tabs, { sortBy: $('sort-by').value, direction: $('direction').value, ignoredNamesByHost })
     .filter((group) => group.tabs.length >= groupRange.min && group.tabs.length <= groupRange.max);
@@ -177,15 +182,15 @@ function render() {
   const activeIds = new Set(allTabs.map((tab) => tab.id));
   for (const id of overrides.keys()) if (!activeIds.has(id)) overrides.delete(id);
   $('tab-count').textContent = filtering ? groups.reduce((count, group) => count + group.tabs.length, 0) : tabs.length;
-  $('tab-count-label').textContent = filtering ? '筛选内标签页' : '已同步标签页';
+  $('tab-count-label').textContent = filtering ? '筛选内标签页' : '标签页';
   $('group-count').textContent = groups.length;
   $('groups').replaceChildren();
   groups.forEach((group, index) => {
     const card = $('group-template').content.firstElementChild.cloneNode(true);
-    card.querySelector('.group-index').textContent = String(index + 1).padStart(2, '0');
     card.querySelector('.group-title').textContent = group.tabs[0].title || '无标题';
+    card.querySelector('.group-title').title = group.tabs[0].title || '无标题';
     card.querySelector('.group-size').textContent = `${group.tabs.length} 项`;
-    card.querySelector('.group-reason').textContent = group.reasons.map((reason) => reason === 'duplicate-url' ? '网址重复' : '标题相似').join(' · ');
+    card.querySelector('.group-header').title = group.reasons.map((reason) => reason === 'duplicate-url' ? '网址重复' : '标题相似').join(' · ');
     const groupCheckbox = card.querySelector('.group-checkbox');
     groupCheckbox.dataset.groupId = group.tabs[0].id;
     groupCheckbox.setAttribute('aria-label', `全选本组：第 ${index + 1} 组，${group.tabs[0].title || '无标题'}`);
@@ -216,26 +221,26 @@ function render() {
       });
       row.querySelector('.tab-title').textContent = tab.title || '无标题';
       row.querySelector('.tab-url').textContent = tab.url || '暂无网址';
-      row.querySelector('.browser-label').textContent = tab.browser;
-      row.querySelector('.tab-time').textContent = tab.openedAt == null ? '打开时间未知' : new Date(tab.openedAt).toLocaleString();
+      row.querySelector('.browser-label').textContent = sourceLabel(tab);
+      row.querySelector('.browser-label').hidden = !mixedSources;
+      row.querySelector('.tab-time').textContent = tab.openedAt == null ? '' : new Date(tab.openedAt).toLocaleString();
+      row.querySelector('.tab-time').hidden = tab.openedAt == null;
+      row.querySelector('.tab-meta').hidden = !mixedSources && tab.openedAt == null;
       card.querySelector('.group-tabs').append(row);
     }
     updateGroupSelection();
     $('groups').append(card);
   });
   $('empty').hidden = groups.length > 0;
-  $('empty').querySelector('h2').textContent = !sources.length ? '让散落的标签页，重新有序' : filtering ? '没有符合项数条件的分组' : '暂未找到需要一起检查的标签页';
-  $('empty').querySelector('p').textContent = !sources.length ? '连接 Chrome 或 Edge 后，相似标题会自动归组。' : filtering ? '调整每组项数范围，或点击“重置”查看全部分组。' : '新的标签页同步后，会自动重新检查。';
+  $('empty').querySelector('h2').textContent = !sources.length ? '等待浏览器连接' : filtering ? '没有符合项数条件的分组' : '暂无相似分组';
+  $('empty').querySelector('p').textContent = !sources.length ? '首次配对后自动连接。' : filtering ? '调整数量范围，或重置筛选。' : '新标签页会自动更新到这里。';
   $('show-setup').hidden = filtering && sources.length > 0;
-  const range = !filtering ? '全部分组' : groupRange.max === Infinity ? `每组至少 ${groupRange.min} 项` : `每组 ${groupRange.min}–${groupRange.max} 项`;
-  $('group-filter-note').textContent = `当前：${range}。项数包含建议保留项；仅关闭当前显示分组中的勾选项。`;
+  $('show-setup').textContent = sources.length ? '连接其他浏览器' : '连接浏览器';
+  $('group-filter-note').textContent = !filtering ? '' : groupRange.max === Infinity ? `每组至少 ${groupRange.min} 项` : `每组 ${groupRange.min}–${groupRange.max} 项`;
   $('auto-preselect').setAttribute('aria-checked', String(autoPreselect));
-  $('auto-preselect-state').textContent = autoPreselect ? '开' : '关';
-  $('sort-note').textContent = !autoPreselect
-    ? '自动预选已关闭；新增项不自动勾选，手动选择在同步与排序后保留。'
-    : $('sort-by').value === 'time'
-    ? '浏览器无法提供可靠的原始打开时间。未知时间排在末尾，该组不自动预选。'
-    : '每组首项建议保留，其余自动预选；你可以随时调整。更换排序会重新预选。';
+  $('sort-note').className = $('sort-by').value === 'time' ? 'note' : 'sr-only';
+  $('sort-note').textContent = $('sort-by').value === 'time' ? '打开时间未知，分组不自动预选。'
+    : autoPreselect ? '按排序保留每组首项，预选其余项；切换排序会重新预选。' : '自动预选已关闭，手动勾选不受影响。';
   updateCount();
   window.scrollTo(0, scrollPosition);
   updateBackToTop();
@@ -253,24 +258,24 @@ $('group-filter').addEventListener('submit', (event) => {
   }
   groupRange = { min, max };
   render();
-  notice('已按每组项数筛选，隐藏分组的手动勾选已保留；关闭仅作用于当前显示的分组。');
+  notice('');
 });
 for (const id of ['group-min', 'group-max']) $(id).addEventListener('input', () => $('group-max').setCustomValidity(''));
 $('group-filter').addEventListener('reset', () => {
   groupRange = { min: 2, max: Infinity };
   $('group-max').setCustomValidity('');
   render();
-  notice('已重置项数筛选，显示当前浏览器来源的全部分组；手动勾选已保留。');
+  notice('已清除筛选。');
 });
 $('source-filter').addEventListener('change', () => {
   window.scrollTo(0, 0);
   render();
-  notice('已切换浏览器来源，列表与关闭仅作用于当前来源；手动勾选已保留。');
+  notice('');
 });
 for (const id of ['sort-by', 'direction']) $(id).addEventListener('change', () => {
   if (autoPreselect) overrides.clear();
   render();
-  notice(autoPreselect ? '已按新排序重新预选，请检查候选项。' : '已调整排序，自动预选保持关闭，手动勾选已保留。');
+  notice(autoPreselect ? '已重新预选，请核对勾选项。' : '排序已更新，自动预选保持关闭。');
 });
 $('auto-preselect').addEventListener('click', () => {
   if (!initialized || closing || savingRules) return;
@@ -279,8 +284,8 @@ $('auto-preselect').addEventListener('click', () => {
   try { localStorage.setItem('auto-preselect', String(autoPreselect)); } catch { stored = false; }
   render();
   const message = autoPreselect
-    ? '已开启自动预选，按当前排序处理；手动勾选和取消已保留，请核对候选项。'
-    : '已关闭自动预选，已取消自动勾选；手动勾选已保留。';
+    ? '已开启自动预选。'
+    : '已关闭自动预选。';
   notice(`${message}${stored ? '' : ' 开关偏好未能保存，重启后可能恢复默认。'}`, !stored);
 });
 $('open-settings').addEventListener('click', () => {
@@ -334,9 +339,9 @@ async function persistRules(next, index, message) {
     showRuleList();
     renderRuleCards();
     if (autoPreselect) overrides.clear();
-    hasCloseResult = false; render();
-    const text = autoPreselect ? `${message}，已重新分组和预选，请核对候选项。`
-      : `${message}，已重新分组；自动预选保持关闭，手动勾选已保留。`;
+    render();
+    const text = autoPreselect ? `${message}，已重新预选。`
+      : `${message}，自动预选保持关闭。`;
     notice(text);
     notice(text, false, 'settings-notice');
     saved = true;
@@ -356,10 +361,10 @@ $('ignore-form').addEventListener('submit', (event) => {
   const next = [...ignoreRules];
   const index = editingRule === -1 ? next.length : editingRule;
   next[index] = { name: $('ignore-name').value, domains: lines('ignore-domains'), ignoredNames: lines('ignore-words') };
-  void persistRules(next, index, '忽略规则已保存并自动应用');
+  void persistRules(next, index, '忽略规则已保存');
 });
 $('copy-code').addEventListener('click', async () => {
-  try { await window.tabTidy.copyCode(); notice('连接码已复制，请粘贴到浏览器扩展中。'); } catch (error) { notice(error.message, true); }
+  try { await window.tabTidy.copyCode(); notice('连接码已复制。'); } catch (error) { notice(error.message, true); }
 });
 $('open-extension').addEventListener('click', async () => {
   try { await window.tabTidy.openExtensionFolder(); } catch (error) { notice(error.message, true); }
@@ -370,9 +375,8 @@ $('close-tabs').addEventListener('click', async () => {
   const selected = groups.flatMap((group) => group.tabs).filter((tab) => tab.selected);
   if (!selected.length) return;
   closing = true;
-  hasCloseResult = false;
   updateCount();
-  notice('请确认待关闭的标签页，确认后将由浏览器执行关闭。');
+  notice('请在弹窗确认关闭。');
   try {
     const result = await window.tabTidy.closeTabs(selected);
     if (result.canceled) { notice('已取消关闭。'); return; }
@@ -382,14 +386,17 @@ $('close-tabs').addEventListener('click', async () => {
     if (issues.length) text += ` ${issues.slice(0, 5).map((item) => `${selected.find((tab) => tab.id === item.id)?.title || '无标题'}：${item.error || '请检查浏览器实际状态。'}`).join('；')}${issues.length > 5 ? '；其余请查看浏览器实际状态。' : ''}`;
     notice(text, issues.length > 0);
   } catch (error) { notice(`关闭未完成：${error.message} 请检查浏览器实际状态后再操作。`, true); }
-  finally { closing = false; hasCloseResult = true; updateCount(); }
+  finally { closing = false; updateCount(); }
 });
 window.tabTidy.onSources((next) => {
   const changed = next.length !== sources.length || next.some((source, index) => source.sourceId !== sources[index]?.sourceId || source.revision !== sources[index]?.revision);
+  if (!sources.length && next.length) {
+    if ($('setup').contains(document.activeElement)) $('setup').querySelector('summary').focus({ preventScroll: true });
+    $('setup').open = false;
+  }
   sources = next;
   if (!changed) { renderSources(); return; }
   render();
-  if (!closing && !hasCloseResult) notice('标签页已同步。手动勾选已保留。');
 });
 try {
   const state = await window.tabTidy.getState();
@@ -400,5 +407,6 @@ try {
   renderRuleCards();
   $('connection-code').value = state.token;
   sources = state.sources;
+  if (sources.length) $('setup').open = false;
   render();
 } catch (error) { notice(`初始化失败：${error.message}`, true); }

@@ -56,11 +56,24 @@ async function waitFor(check) {
   };
   const longTabs = Array.from({ length: 40 }, (_, index) => ({ id: index + 100,
     title: `回到顶部测试 第${index + 1}章`, url: `https://example.com/scroll/${index + 1}` }));
+  await js("document.getElementById('connection-code').focus()");
   await post('chrome-test', 'Chrome', longTabs);
   await waitFor(() => js("document.querySelectorAll('.tab-row').length === 40"));
+  assert.equal(await js("document.getElementById('setup').open"), false, '首次连接后收起配对说明');
+  assert.equal(await js("document.activeElement.matches('#setup summary')"), true, '收起配对说明时保留可操作的键盘焦点');
+  assert.equal(await js("document.getElementById('notice').textContent"), '', '自动同步不显示重复成功提示');
+  assert.equal(await js("document.querySelector('.group').getBoundingClientRect().top < 280"), true, '紧凑布局应让列表在首屏靠前显示');
+  assert.equal(await js("Array.from(document.querySelectorAll('.browser-label, .tab-time')).every(element => element.hidden)"), true, '单一来源不重复标注浏览器，未知时间不逐项显示');
+  await js("document.getElementById('setup').open=true");
+  longTabs[0].title += '（同步）';
+  await post('chrome-test', 'Chrome', longTabs);
+  await waitFor(() => js("document.getElementById('groups').textContent.includes('（同步）')"));
+  assert.equal(await js("document.getElementById('setup').open"), true, '主动展开的配对说明不被后续同步收起');
+  await js("document.getElementById('setup').open=false");
   const selectedBeforeScroll = await js("Array.from(document.querySelectorAll('.tab-row input:checked'), input => input.dataset.tabId)");
   await js('window.scrollTo(0, 600)');
   await waitFor(() => js("!document.getElementById('back-to-top').hidden"));
+  assert.equal(await js("(() => { const rect=document.getElementById('close-tabs').getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight; })()"), true, '长列表滚动时关闭操作保持可见');
   assert.equal(await js("(() => { const button = document.getElementById('back-to-top'); const rect = button.getBoundingClientRect(); return button.getAttribute('aria-label') === '回到顶部' && rect.width >= 44 && rect.height >= 44 && rect.bottom <= innerHeight && rect.right <= innerWidth; })()"), true, '按钮应有可访问名称且固定在视口内');
   await mkdir('artifacts', { recursive: true });
   await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
@@ -297,6 +310,8 @@ async function waitFor(check) {
     }
   }
   await js("document.getElementById('sort-by').value='time'; document.getElementById('sort-by').dispatchEvent(new Event('change'))");
+  assert.equal(await js("document.getElementById('sort-note').classList.contains('sr-only')"), false);
+  assert.ok((await js("document.getElementById('sort-note').textContent")).includes('打开时间未知'), '时间排序保留必要的未知时间提示');
   assert.equal(await js("document.getElementById('selected-count').textContent"), '0');
   assert.deepEqual(await groupSelection(), [{ checked: false, indeterminate: false, selected: 0 }]);
   await js("document.querySelector('.group-checkbox').click()");
@@ -330,6 +345,13 @@ async function waitFor(check) {
   ];
   await post('edge-test', 'Edge', edgeTabs);
   await waitFor(() => js("document.querySelectorAll('.group').length === 2"));
+  assert.equal(await js("Array.from(document.querySelectorAll('.browser-label')).every(element => !element.hidden)"), true, '混合来源仍能识别各标签页的浏览器');
+  assert.deepEqual(await js("Array.from(document.getElementById('source-filter').options, option => option.textContent)"), ['全部浏览器', 'Chrome', 'Edge']);
+  await post('edge-test', 'Chrome', edgeTabs);
+  await waitFor(() => js("document.getElementById('source-filter').options[1].textContent.includes('chrome')"));
+  assert.deepEqual(await js("Array.from(document.getElementById('source-filter').options, option => option.textContent)"), ['全部浏览器', 'Chrome · chrome', 'Chrome · edge-t'], '同浏览器多个配置仍显示来源标识');
+  await post('edge-test', 'Edge', edgeTabs);
+  await waitFor(() => js("document.getElementById('source-filter').options[2].textContent === 'Edge'"));
   await js("document.querySelectorAll('.group-checkbox')[0].click()");
   assert.deepEqual(await groupSelection(), [
     { checked: true, indeterminate: false, selected: 2 },
@@ -460,7 +482,9 @@ async function waitFor(check) {
   await js("document.getElementById('cancel-rule').click(); document.querySelector('.edit-rule[data-rule-index=\"1\"]').click(); document.getElementById('ignore-words').value='---'; document.getElementById('save-ignore').click()");
   await waitFor(() => js("document.getElementById('notice').textContent.includes('每个忽略词')"));
   assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), savedRules, '无效输入不应覆盖保存的设置');
-  assert.equal(await js("document.querySelector('.settings-content').scrollHeight > document.querySelector('.settings-content').clientHeight"), true, '最小窗口下编辑表单应可滚动');
+  await js("const content=document.querySelector('.settings-content'); content.scrollTop=content.scrollHeight");
+  await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  assert.equal(await js("(() => { const content=document.querySelector('.settings-content').getBoundingClientRect(); const button=document.getElementById('save-ignore').getBoundingClientRect(); return button.top >= content.top && button.bottom <= content.bottom; })()"), true, '最小窗口下编辑表单的保存操作可到达');
   await writeFile('artifacts/settings-editor-preview.png', (await window.webContents.capturePage()).toPNG());
   await js("document.getElementById('cancel-rule').click()");
   assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), savedRules, '取消编辑不应修改原规则');

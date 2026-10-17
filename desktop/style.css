@@ -48,47 +48,35 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   outline-offset:3px
 }
 aside {
-  width:255px;
+  position:sticky;
+  top:0;
+  align-self:flex-start;
+  width:224px;
+  height:100dvh;
+  overflow-y:auto;
   flex-shrink:0;
-  padding:34px 22px;
+  padding:24px 18px;
   background:#edf1e9;
   border-right:1px solid #dfe5da;
   display:flex;
   flex-direction:column;
-  min-height:100vh
+  min-height:0
 }
 .brand {
   display:flex;
   align-items:center;
   gap:12px;
-  font-size:25px;
+  font-size:21px;
   font-weight:700;
   letter-spacing:-.7px;
-  margin-bottom:42px
+  margin-bottom:32px
 }
 .brand-icon {
   background:#2d6551;
   color:white;
   border-radius:11px;
-  font-size:26px;
-  padding:3px 11px
-}
-.brand small {
-  display:block;
-  font-size:11px;
-  color:#5d6c54;
-  font-weight:400;
-  letter-spacing:1.3px;
-  margin-top:5px
-}
-.section-label,.eyebrow {
-  font-size:11px;
-  letter-spacing:1.5px;
-  color:#5d6c54;
-  text-transform:uppercase
-}
-.section-label {
-  margin-bottom:14px
+  font-size:23px;
+  padding:2px 9px
 }
 .muted {
   color:#5d6c54;
@@ -96,7 +84,9 @@ aside {
   margin:6px 0 0
 }
 #sources {
-  margin-bottom:25px
+  margin-bottom:22px;
+  font-size:12px;
+  color:#5d6c54
 }
 .source-filter-label {
   display:block;
@@ -109,7 +99,22 @@ aside {
   margin-bottom:4px
 }
 .source-state {
-  font-weight:600
+  font-weight:400
+}
+.source-state::before {
+  content:"";
+  display:inline-block;
+  width:5px;
+  height:5px;
+  margin-right:6px;
+  border-radius:50%;
+  background:currentColor
+}
+.source-state[data-connected="true"] {
+  color:#27624d
+}
+.source-state[data-connected="false"] {
+  color:#865736
 }
 .source {
   background:#f9fbf6;
@@ -120,6 +125,16 @@ aside {
 }
 .source strong {
   font-size:13px
+}
+.source-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px
+}
+.source-heading span {
+  font-size:12px;
+  color:#5d6c54
 }
 .source small {
   display:block;
@@ -153,6 +168,9 @@ aside button {
   padding:9px;
   font-size:12px
 }
+#open-extension {
+  margin-top:14px
+}
 .code-label {
   display:block;
   font-size:11px;
@@ -160,12 +178,22 @@ aside button {
   margin:17px 0 7px
 }
 #connection-code {
-  width:100%;
+  flex:1;
+  min-width:0;
+  width:0;
   border:1px solid #d8e1d3;
   border-radius:7px;
   padding:9px;
-  background:#f9fbf7;
-  margin-bottom:8px
+  background:#f9fbf7
+}
+.code-actions {
+  display:flex;
+  gap:6px
+}
+.code-actions button {
+  width:auto;
+  padding:8px 12px;
+  flex-shrink:0
 }
 .sidebar-foot {
   margin-top:auto;
@@ -173,10 +201,6 @@ aside button {
   color:#5d6c54;
   font-size:12px;
   line-height:1.9
-}
-.sidebar-foot small {
-  color:#5d6c54;
-  font-size:10px
 }
 .local-dot {
   display:inline-block;
@@ -187,26 +211,35 @@ aside button {
   margin-right:6px
 }
 main {
-  padding:34px 38px 22px;
+  padding:0 28px 24px;
   flex:1;
-  min-width:0
+  min-width:0;
+  min-height:100vh
 }
 header {
   display:flex;
   justify-content:space-between;
-  align-items:center
+  align-items:center;
+  position:sticky;
+  top:0;
+  z-index:2;
+  padding:22px 0;
+  background:#f6f7f4;
+  border-bottom:1px solid #e3e8df;
+  gap:20px
 }
 .header-actions {
   display:flex;
   align-items:center;
-  gap:12px
+  gap:9px;
+  flex-shrink:0
 }
 .icon-button {
   display:inline-grid;
   place-items:center;
-  width:42px;
-  height:42px;
-  padding:10px
+  width:38px;
+  height:38px;
+  padding:9px
 }
 .icon-button svg {
   width:21px;
@@ -223,88 +256,86 @@ header {
   z-index:1
 }
 h1 {
-  font-size:29px;
-  letter-spacing:-1px;
-  margin:8px 0 4px;
+  font-size:23px;
+  letter-spacing:-.5px;
+  margin:0 0 6px;
   font-weight:650
-}
-.manual-confirm {
-  font-size:11px;
-  border:1px solid #dae4d6;
-  color:#5d6c54;
-  padding:7px 10px;
-  border-radius:20px
 }
 .stats {
   display:flex;
-  gap:50px;
-  padding:26px 0;
-  border-bottom:1px solid #e3e8df
-}
-.stats div {
-  display:flex;
-  gap:10px;
-  align-items:baseline
+  gap:16px;
+  color:#5d6c54;
+  font-size:12px
 }
 .stats strong {
-  font-size:29px;
-  font-weight:500;
+  font-size:13px;
+  font-weight:600;
   color:#3c6450
-}
-.stats span {
-  font-size:11px;
-  color:#5d6c54
 }
 .toolbar {
   display:flex;
   justify-content:space-between;
   align-items:center;
-  margin-top:23px;
-  gap:12px
+  flex-wrap:wrap;
+  padding:16px 0;
+  gap:12px 18px
 }
 .sort-controls {
   display:flex;
   align-items:center;
-  gap:9px;
+  gap:7px;
   font-size:12px;
   flex-wrap:wrap
-}
-.sort-controls label {
-  color:#5d6c54;
-  margin-right:3px
 }
 #group-filter {
   display:flex;
   align-items:center;
   flex-wrap:wrap;
-  gap:9px;
-  margin-top:18px;
+  gap:7px;
+  margin:0;
   font-size:12px
 }
 #group-filter label {
   color:#5d6c54
 }
 #group-filter input {
-  width:76px;
+  width:62px;
   min-width:0;
-  padding:9px;
+  padding:8px;
   border:1px solid #dce3d7;
   border-radius:7px;
   color:#41573d;
   background:white
 }
 #group-filter button {
-  padding:9px 12px;
+  padding:8px 10px;
   font-size:12px
 }
-#group-filter-note {
-  margin-bottom:0
+#group-filter .icon-button {
+  width:32px;
+  height:34px;
+  padding:7px
+}
+#group-filter .icon-button svg {
+  width:17px;
+  height:17px
+}
+.control-notes {
+  display:flex;
+  flex-wrap:wrap;
+  gap:0 18px
+}
+.control-notes .note {
+  margin:0 0 12px
+}
+.control-notes .note:empty {
+  display:none
 }
 .preselect-toggle {
   display:flex;
   align-items:center;
-  gap:8px;
-  padding:9px 11px;
+  gap:7px;
+  padding:8px 10px;
   font-size:12px;
   white-space:nowrap;
   flex-shrink:0
@@ -336,27 +367,24 @@ h1 {
 [aria-checked="true"] .switch-track::after {
   transform:translateX(12px)
 }
-#auto-preselect-state {
-  font-size:10px;
-  color:#5d6c54
-}
 select {
   background:white;
   border:1px solid #dce3d7;
   color:#41573d;
   border-radius:7px;
   font-size:12px;
-  padding:9px
+  padding:8px
 }
 #close-tabs {
   font-size:12px;
+  padding:11px 14px;
   white-space:nowrap;
   background:#9b4435
 }
 #close-tabs:hover {
   background:#81372d
 }
-#close-count {
+#selected-count {
   background:#ffffff24;
   border-radius:4px;
   padding:2px 6px;
@@ -401,7 +429,7 @@ select {
 }
 .settings-layout {
   display:grid;
-  grid-template-columns:180px minmax(0,1fr);
+  grid-template-columns:150px minmax(0,1fr);
   flex:1;
   min-height:0
 }
@@ -412,11 +440,6 @@ select {
   background:#f4f6f1;
   border-right:1px solid #e3e8df;
   overflow-y:auto
-}
-.settings-nav-label {
-  margin:0 12px 14px;
-  color:#5d6c54;
-  font-size:11px
 }
 .settings-nav button {
   display:flex;
@@ -434,27 +457,22 @@ select {
   height:18px;
   flex-shrink:0
 }
-.settings-local {
-  margin:auto 12px 0;
-  padding-top:28px;
-  font-size:10px;
-  line-height:1.9;
-  color:#5d6c54
-}
 .settings-content {
-  padding:26px;
+  padding:24px;
   overflow-y:auto;
   min-height:0;
   background:#fafbf8
 }
 .settings-section-header {
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   justify-content:space-between;
   gap:16px
 }
-.settings-section-header .note {
-  margin:9px 0 0
+.settings-section-title {
+  display:flex;
+  align-items:center;
+  gap:10px
 }
 #add-rule {
   white-space:nowrap;
@@ -468,14 +486,15 @@ select {
 .rule-count {
   font-size:11px;
   color:#5d6c54;
-  margin:24px 0 12px
+  margin:0
 }
 #rule-cards {
   display:grid;
-  gap:14px
+  gap:12px;
+  margin-top:20px
 }
 .rule-card {
-  padding:20px;
+  padding:18px;
   border:1px solid #dfe6da;
   border-radius:11px;
   background:#fff
@@ -485,7 +504,7 @@ select {
   justify-content:space-between;
   align-items:flex-start;
   gap:16px;
-  margin-bottom:18px
+  margin-bottom:12px
 }
 .rule-card-header>div:first-child {
   min-width:0
@@ -494,11 +513,6 @@ select {
   margin:0;
   font-size:15px;
   overflow-wrap:anywhere
-}
-.rule-card-count {
-  margin:7px 0 0;
-  font-size:10px;
-  color:#5d6c54
 }
 .rule-card-actions {
   display:flex;
@@ -550,21 +564,9 @@ select {
   border-radius:11px;
   color:#5d6c54
 }
-.rules-empty>span {
-  display:inline-block;
-  padding:8px 15px;
-  font-size:27px;
-  border-radius:12px;
-  background:#edf2e8
-}
 .rules-empty h4 {
   font-size:15px;
   color:#365748
-}
-.rules-empty p {
-  margin-bottom:0;
-  font-size:12px;
-  line-height:1.8
 }
 #rule-editor {
   margin-top:22px;
@@ -639,61 +641,45 @@ select {
   background:#fff;
   border:1px solid #e1e6dc;
   border-radius:10px;
-  margin-bottom:17px;
+  margin-bottom:14px;
   overflow:hidden
 }
 .group-header {
-  padding:15px 17px;
+  padding:12px 16px;
   background:#fafbf8;
   display:flex;
   justify-content:space-between;
   align-items:center;
   gap:10px
 }
-.group-header>div {
-  min-width:0;
-  display:flex;
-  align-items:center;
-  gap:10px
-}
 .group-select {
   display:flex;
   align-items:center;
-  gap:7px;
+  gap:11px;
   font-size:12px;
   white-space:nowrap;
-  flex-shrink:0;
+  min-width:0;
+  width:100%;
   cursor:pointer
-}
-.group-index {
-  font-size:10px;
-  color:#5d6c54;
-  border:1px solid #e0e7d9;
-  border-radius:4px;
-  padding:3px 6px
 }
 .group-title {
   font-size:13px;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-  max-width:360px
+  flex:1;
+  min-width:0
 }
-.group-size,.group-reason {
+.group-size {
   color:#5d6c54;
   font-size:10px;
   white-space:nowrap
-}
-.group-reason {
-  background:#edf2e9;
-  border-radius:5px;
-  padding:4px 7px
 }
 .tab-row {
   display:flex;
   gap:13px;
   align-items:center;
-  padding:15px 18px;
+  padding:12px 16px;
   border-top:1px solid #eef0e9;
   cursor:pointer
 }
@@ -712,7 +698,7 @@ select {
 .tab-content {
   display:flex;
   flex-direction:column;
-  gap:6px;
+  gap:4px;
   min-width:0;
   flex:1
 }
@@ -722,7 +708,7 @@ select {
   overflow-wrap:anywhere
 }
 .tab-url {
-  font-size:10px;
+  font-size:11px;
   color:#5d6c54;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -739,9 +725,6 @@ select {
   color:#5d6c54
 }
 .browser-label {
-  padding:3px 7px;
-  border-radius:5px;
-  background:#f0f3ec;
   color:#5d6c54
 }
 .tab-time {
@@ -750,14 +733,6 @@ select {
 .empty {
   text-align:center;
   padding:68px 12px 95px
-}
-.empty-icon {
-  color:#5d6c54;
-  background:#edf2e8;
-  font-size:38px;
-  border-radius:18px;
-  display:inline-block;
-  padding:9px 23px
 }
 .empty h2 {
   font-size:19px;
@@ -777,16 +752,6 @@ select {
 .empty[hidden] {
   display:none
 }
-footer {
-  border-top:1px solid #e3e8dc;
-  padding-top:18px;
-  margin-top:24px;
-  display:flex;
-  justify-content:space-between;
-  color:#5d6c54;
-  font-size:10px;
-  gap:15px
-}
 .sr-only {
   position:absolute;
   width:1px;
@@ -799,16 +764,10 @@ footer {
 }
 @media(max-width:1050px) {
   main {
-    padding:28px 23px
-  }
-  .stats {
-    gap:25px
+    padding:0 22px 22px
   }
   aside {
-    width:232px;
-    padding:28px 19px
-  }
-  .group-title {
-    max-width:245px
+    width:210px;
+    padding:22px 16px
   }
 }
