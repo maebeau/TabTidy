@@ -11,6 +11,7 @@ let ignoreRules = [];
 let savingRules = false;
 let initialized = false;
 let editingRule = null;
+let autoPreselect = true;
 
 function notice(text, error = false, id = 'notice') {
   $(id).textContent = text;
@@ -23,7 +24,7 @@ function updateCount() {
   $('close-count').textContent = count;
   const busy = !initialized || closing || savingRules;
   $('close-tabs').disabled = busy || count === 0;
-  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
+  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #auto-preselect, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
 }
 
 function updateWebsiteChoices(tabs) {
@@ -168,7 +169,7 @@ function render() {
       updateCount();
     });
     for (const tab of group.tabs) {
-      if (overrides.has(tab.id)) tab.selected = overrides.get(tab.id);
+      tab.selected = overrides.has(tab.id) ? overrides.get(tab.id) : autoPreselect && tab.selected;
       const row = $('tab-template').content.firstElementChild.cloneNode(true);
       const checkbox = row.querySelector('input');
       checkbox.dataset.tabId = tab.id;
@@ -191,7 +192,11 @@ function render() {
   $('empty').hidden = groups.length > 0;
   $('empty').querySelector('h2').textContent = sources.length ? '暂未找到需要一起检查的标签页' : '让散落的标签页，重新有序';
   $('empty').querySelector('p').textContent = sources.length ? '新的标签页同步后，会自动重新检查。' : '连接 Chrome 或 Edge 后，相似标题会自动归组。';
-  $('sort-note').textContent = $('sort-by').value === 'time'
+  $('auto-preselect').setAttribute('aria-checked', String(autoPreselect));
+  $('auto-preselect-state').textContent = autoPreselect ? '开' : '关';
+  $('sort-note').textContent = !autoPreselect
+    ? '自动预选已关闭；新增项不自动勾选，手动选择在同步与排序后保留。'
+    : $('sort-by').value === 'time'
     ? '浏览器无法提供可靠的原始打开时间。未知时间排在末尾，该组不自动预选。'
     : '每组首项建议保留，其余自动预选；你可以随时调整。更换排序会重新预选。';
   updateCount();
@@ -200,7 +205,20 @@ function render() {
 }
 
 for (const id of ['sort-by', 'direction']) $(id).addEventListener('change', () => {
-  overrides.clear(); render(); notice('已按新排序重新预选，请检查候选项。');
+  if (autoPreselect) overrides.clear();
+  render();
+  notice(autoPreselect ? '已按新排序重新预选，请检查候选项。' : '已调整排序，自动预选保持关闭，手动勾选已保留。');
+});
+$('auto-preselect').addEventListener('click', () => {
+  if (!initialized || closing || savingRules) return;
+  autoPreselect = !autoPreselect;
+  let stored = true;
+  try { localStorage.setItem('auto-preselect', String(autoPreselect)); } catch { stored = false; }
+  render();
+  const message = autoPreselect
+    ? '已开启自动预选，按当前排序处理；手动勾选和取消已保留，请核对候选项。'
+    : '已关闭自动预选，已取消自动勾选；手动勾选已保留。';
+  notice(`${message}${stored ? '' : ' 开关偏好未能保存，重启后可能恢复默认。'}`, !stored);
 });
 $('open-settings').addEventListener('click', () => {
   if (!$('settings-dialog').open) $('settings-dialog').showModal();
@@ -252,8 +270,10 @@ async function persistRules(next, index, message) {
     ignoreRules = result.rules;
     showRuleList();
     renderRuleCards();
-    overrides.clear(); hasCloseResult = false; render();
-    const text = `${message}，已重新分组和预选，请核对候选项。`;
+    if (autoPreselect) overrides.clear();
+    hasCloseResult = false; render();
+    const text = autoPreselect ? `${message}，已重新分组和预选，请核对候选项。`
+      : `${message}，已重新分组；自动预选保持关闭，手动勾选已保留。`;
     notice(text);
     notice(text, false, 'settings-notice');
     saved = true;
@@ -305,6 +325,8 @@ window.tabTidy.onSources((next) => { sources = next; render(); if (!closing && !
 try {
   const state = await window.tabTidy.getState();
   ignoreRules = state.ignoreRules;
+  try { autoPreselect = localStorage.getItem('auto-preselect') !== 'false'; }
+  catch { autoPreselect = false; notice('无法读取自动预选偏好，本次已关闭自动预选；仍可手动勾选或开启。', true); }
   initialized = true;
   renderRuleCards();
   $('connection-code').value = state.token;

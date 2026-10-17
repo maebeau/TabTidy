@@ -80,6 +80,44 @@ async function waitFor(check) {
   await waitFor(() => js("document.getElementById('selected-count').textContent === '1'"));
   assert.equal(await js("document.querySelectorAll('.group').length"), 1);
   assert.deepEqual(await groupSelection(), [{ checked: false, indeterminate: true, selected: 1 }]);
+  assert.equal(await js("document.getElementById('auto-preselect').getAttribute('aria-checked')"), 'true', '首次默认开启自动预选');
+  await js("document.getElementById('auto-preselect').focus(); document.getElementById('auto-preselect').click()");
+  assert.equal(await js('document.activeElement.id'), 'auto-preselect');
+  assert.equal(await js("document.getElementById('auto-preselect').getAttribute('aria-checked')"), 'false');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '0', '关闭开关应取消自动勾选');
+  assert.equal(await js("document.getElementById('close-tabs').disabled"), true);
+  await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:11\"]').click()");
+  const extraTab = { id: 12, title: '星河旅行 1-25 整理版', url: 'https://example.com/novel/25' };
+  await post('chrome-test', 'Chrome', [...tabs, extraTab]);
+  await waitFor(() => js("document.getElementById('tab-count').textContent === '3'"));
+  assert.deepEqual(await js("Array.from(document.querySelectorAll('.tab-row input'), input => [input.dataset.tabId, input.checked])"), [
+    ['chrome-test:11', true], ['chrome-test:12', false], ['chrome-test:10', false],
+  ], '关闭后新同步项不自动勾选，人工选择保留');
+  await js("document.getElementById('direction').value='asc'; document.getElementById('direction').dispatchEvent(new Event('change'))");
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '1', '关闭时切换排序不清空人工选择');
+  assert.ok((await js("document.getElementById('notice').textContent")).includes('自动预选保持关闭'));
+  await post('chrome-test', 'Chrome', tabs);
+  await waitFor(() => js("document.getElementById('tab-count').textContent === '2'"));
+  await js("document.getElementById('direction').value='desc'; document.getElementById('direction').dispatchEvent(new Event('change')); document.querySelector('.tab-row input[data-tab-id=\"chrome-test:11\"]').click(); document.querySelector('.tab-row input[data-tab-id=\"chrome-test:10\"]').click(); document.getElementById('auto-preselect').click()");
+  await post('chrome-test', 'Chrome', [...tabs, extraTab]);
+  await waitFor(() => js("document.getElementById('tab-count').textContent === '3'"));
+  assert.deepEqual(await js("Array.from(document.querySelectorAll('.tab-row input'), input => [input.dataset.tabId, input.checked])"), [
+    ['chrome-test:11', false], ['chrome-test:12', true], ['chrome-test:10', true],
+  ], '重新开启应预选非手动项，并保留手动勾选与取消');
+  await js("document.getElementById('auto-preselect').click()");
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '1', '关闭只取消自动项，不取消手动勾选');
+  assert.equal(await js("localStorage.getItem('auto-preselect')"), 'false');
+  const preselectReloaded = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
+  window.webContents.reload();
+  await preselectReloaded;
+  await waitFor(() => js("Boolean(document.getElementById('connection-code').value)"));
+  assert.equal(await js("document.getElementById('auto-preselect').getAttribute('aria-checked')"), 'false', '重载后应沿用关闭状态');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '0', '手动选择不跨重载保存，关闭时也不恢复自动项');
+  await post('chrome-test', 'Chrome', tabs);
+  await waitFor(() => js("document.getElementById('tab-count').textContent === '2'"));
+  await js("document.getElementById('auto-preselect').click()");
+  assert.equal(await js("localStorage.getItem('auto-preselect')"), 'true');
+  assert.deepEqual(await groupSelection(), [{ checked: false, indeterminate: true, selected: 1 }], '重新开启后沿用默认自然排序建议');
   await js("document.querySelector('.group-select').click()");
   assert.deepEqual(await groupSelection(), [{ checked: true, indeterminate: false, selected: 2 }]);
   assert.equal(await js("document.getElementById('selected-count').textContent"), '2');
@@ -168,6 +206,7 @@ async function waitFor(check) {
   await waitFor(() => Boolean(confirm));
   assert.equal(await js("document.getElementById('close-tabs').disabled"), true);
   assert.equal(await js("Array.from(document.querySelectorAll('.group-checkbox, .tab-row input')).every(input => input.disabled)"), true);
+  assert.equal(await js("document.getElementById('auto-preselect').disabled"), true, '确认关闭期间禁用开关');
   confirm({ response: 0 });
   await waitFor(() => js("document.getElementById('notice').textContent.includes('已取消关闭')"));
   assert.equal(received.length, 0, '取消确认不能发送关闭指令');
@@ -248,6 +287,8 @@ async function waitFor(check) {
   await post('chrome-test', 'Chrome', bookTabs);
   await waitFor(() => js("document.querySelectorAll('.group').length === 2"));
   assert.deepEqual(await js("Array.from(document.querySelectorAll('.group:first-child .tab-title'), element => element.textContent)"), bookTabs.map((tab) => tab.title), '应显示并按原始标题排序');
+  await js("document.getElementById('close-settings').click(); document.getElementById('auto-preselect').click(); document.querySelector('.tab-row input[data-tab-id=\"chrome-test:25\"]').click(); document.getElementById('open-settings').focus(); document.getElementById('open-settings').click()");
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '1', '关闭自动预选后仍可手动勾选');
   await js("document.querySelector('.edit-rule[data-rule-index=\"1\"]').click(); document.getElementById('ignore-words').value='draft'; document.getElementById('ignore-words').focus()");
   await post('chrome-test', 'Chrome', [...bookTabs, { id: 27, title: '独立页面', url: 'https://fresh.example/page' }]);
   await waitFor(() => js("document.getElementById('tab-count').textContent === '5'"));
@@ -260,6 +301,8 @@ async function waitFor(check) {
   await waitFor(() => js("Boolean(document.getElementById('connection-code').value)"));
   assert.equal(await js("document.querySelectorAll('.group').length"), 2, '重新加载界面后规则应自动应用');
   assert.equal(await js("document.getElementById('settings-dialog').open"), false, '重载后设置应默认关闭');
+  assert.equal(await js("document.getElementById('auto-preselect').getAttribute('aria-checked')"), 'false');
+  await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:25\"]').click()");
   await js("document.getElementById('open-settings').focus(); document.getElementById('open-settings').click(); document.querySelector('.edit-rule[data-rule-index=\"1\"]').click()");
   assert.equal(await js("document.getElementById('ignore-name').value"), '小说站');
   assert.equal(await js("document.getElementById('ignore-domains').value"), 'noise.example\narchive.example');
@@ -269,6 +312,9 @@ async function waitFor(check) {
   const updatedRule = { ...noiseRule, name: '小说站新名称', domains: [...noiseRule.domains, 'fresh.example'] };
   const savedRules = [legacyRule, updatedRule];
   assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), savedRules, '追加域名和改名应保留原忽略词，重复添加应去重');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '1', '关闭自动预选时保存规则不新增勾选、不清空手动选择');
+  assert.equal(await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:25\"]').checked"), true);
+  assert.ok((await js("document.getElementById('settings-notice').textContent")).includes('自动预选保持关闭'));
   await post('chrome-test', 'Chrome', [...bookTabs, { id: 27, title: 'efg 下载专区', url: 'https://fresh.example/page' }]);
   await waitFor(() => js("document.getElementById('tab-count').textContent === '5'"));
   assert.equal(await js("document.querySelectorAll('.tab-row').length"), 4, '新域名应立即共用原规则的忽略词');
@@ -306,9 +352,12 @@ async function waitFor(check) {
   assert.equal(await js('window.ruleInjected'), undefined);
   await js("document.getElementById('close-settings').click()");
   assert.equal(await js('document.activeElement.id'), 'open-settings');
+  await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true, '新增开关后最小窗口主界面不应横向溢出');
+  await writeFile('artifacts/auto-preselect-preview.png', (await window.webContents.capturePage()).toPNG());
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   clearTimeout(timeout);
-  console.log('桌面验证通过：图标入口、设置分栏、规则卡片添加/编辑/取消/删除与空状态、键盘焦点、草稿保留、最小窗口滚动、同步与保存结果、双浏览器、分组勾选、确认关闭、迁移、多域名规则、重载及恶意文本处理。');
+  console.log('桌面验证通过：自动预选开关、手动覆盖、同步/排序/规则保存保留选择、开关记忆、设置分栏和规则卡片、键盘焦点、最小窗口、双浏览器、分组勾选、确认关闭、迁移及恶意文本处理。');
   await rm(temporary, { recursive: true, force: true });
   app.exit(0);
 })().catch((error) => { console.error(error); app.exit(1); });

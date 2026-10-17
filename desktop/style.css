@@ -250,6 +250,46 @@ h1 {
   color:#5d6c54;
   margin-right:3px
 }
+.preselect-toggle {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:9px 11px;
+  font-size:12px;
+  white-space:nowrap;
+  flex-shrink:0
+}
+.preselect-toggle[aria-checked="true"] {
+  border-color:#b9d1bd;
+  background:#edf3e8
+}
+.switch-track {
+  display:block;
+  width:28px;
+  height:16px;
+  border-radius:12px;
+  background:#b9c5b5;
+  flex-shrink:0
+}
+.switch-track::after {
+  content:"";
+  display:block;
+  width:12px;
+  height:12px;
+  margin:2px;
+  border-radius:50%;
+  background:white
+}
+[aria-checked="true"] .switch-track {
+  background:#27624d
+}
+[aria-checked="true"] .switch-track::after {
+  transform:translateX(12px)
+}
+#auto-preselect-state {
+  font-size:10px;
+  color:#5d6c54
+}
 select {
   background:white;
   border:1px solid #dce3d7;

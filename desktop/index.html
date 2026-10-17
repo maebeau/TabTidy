@@ -37,6 +37,7 @@
     </section>
     <section class="toolbar" aria-label="排序和关闭">
       <div class="sort-controls"><label for="sort-by">组内排序</label><select id="sort-by"><option value="natural">自然排序</option><option value="time">打开时间</option></select><label class="sr-only" for="direction">排序方向</label><select id="direction"><option value="desc">降序 · 较大 / 较新优先</option><option value="asc">升序 · 较小 / 较旧优先</option></select></div>
+      <button id="auto-preselect" class="secondary preselect-toggle" type="button" role="switch" aria-checked="true" aria-label="自动预选" aria-describedby="sort-note" title="开启或关闭按排序自动预选" disabled><span class="switch-track" aria-hidden="true"></span><span>自动预选</span><span id="auto-preselect-state" aria-hidden="true">开</span></button>
       <button id="close-tabs" title="确认后关闭浏览器中已勾选的标签页" disabled>关闭已选标签页 <span id="close-count">0</span></button>
     </section>
     <p id="sort-note" class="note">每组首项建议保留，其余自动预选；你可以随时调整。更换排序会重新预选。</p>
