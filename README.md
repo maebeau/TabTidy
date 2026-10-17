@@ -33,6 +33,8 @@ npm start
 npm run package:win
 ```
 
+Windows 打包默认从 npmmirror 镜像下载 Electron 运行时，无需手动设置环境变量。需要切换下载源时，可通过 `ELECTRON_MIRROR` 和 `ELECTRON_CUSTOM_DIR` 覆盖默认地址及版本目录。
+
 Windows 便携文件夹输出至 `dist/TabTidy-win32-x64/`，扩展位于其中的 `resources/browser-extension/`。如果 npm 的安全策略跳过 Electron 安装脚本，可执行 `node node_modules/electron/install.js` 完成运行时下载。
 
 测试：
