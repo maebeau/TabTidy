@@ -10,6 +10,7 @@ let hasCloseResult = false;
 let ignoreRules = [];
 let savingRules = false;
 let initialized = false;
+let editingRule = null;
 
 function notice(text, error = false, id = 'notice') {
   $(id).textContent = text;
@@ -22,8 +23,7 @@ function updateCount() {
   $('close-count').textContent = count;
   const busy = !initialized || closing || savingRules;
   $('close-tabs').disabled = busy || count === 0;
-  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #open-settings, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
-  $('delete-ignore').disabled = busy || $('ignore-rule').value === '-1';
+  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
 }
 
 function updateWebsiteChoices(tabs) {
@@ -42,23 +42,81 @@ function updateWebsiteChoices(tabs) {
 }
 
 function editRule(index) {
+  editingRule = index;
   const rule = ignoreRules[index];
-  $('ignore-rule').value = String(index);
   $('ignore-name').value = rule?.name || '';
   $('ignore-domains').value = rule?.domains.join('\n') || '';
   $('ignore-words').value = rule?.ignoredNames.join('\n') || '';
+  $('website-hosts').value = '';
+  $('rule-editor-title').textContent = rule ? '编辑规则' : '添加规则';
+  $('rule-editor').hidden = false;
+  $('rule-list').hidden = true;
+  $('add-rule').hidden = true;
+  notice('', false, 'settings-notice');
   updateCount();
+  $('ignore-name').focus();
+  document.querySelector('.settings-content').scrollTop = 0;
 }
 
-function updateRuleChoices(index = -1) {
-  const options = ignoreRules.map((rule, index) => {
-    const option = document.createElement('option');
-    option.value = String(index);
-    option.textContent = `${rule.name}（${rule.domains[0]}${rule.domains.length > 1 ? ` 等 ${rule.domains.length} 个域名` : ''}）`;
-    return option;
-  });
-  $('ignore-rule').replaceChildren($('ignore-rule').options[0], ...options);
-  editRule(index);
+function showRuleList() {
+  editingRule = null;
+  $('rule-editor').hidden = true;
+  $('rule-list').hidden = false;
+  $('add-rule').hidden = false;
+  $('ignore-form').reset();
+}
+
+function renderRuleCards() {
+  $('rule-count').textContent = `已保存 ${ignoreRules.length} 条规则`;
+  $('rules-empty').hidden = ignoreRules.length > 0;
+  $('rule-cards').replaceChildren(...ignoreRules.map((rule, index) => {
+    const card = document.createElement('article');
+    card.className = 'rule-card';
+    const header = document.createElement('div');
+    header.className = 'rule-card-header';
+    const heading = document.createElement('div');
+    const title = document.createElement('h4');
+    title.textContent = rule.name;
+    const count = document.createElement('p');
+    count.className = 'rule-card-count';
+    count.textContent = `${rule.domains.length} 个域名 · ${rule.ignoredNames.length} 个忽略词`;
+    heading.append(title, count);
+    const actions = document.createElement('div');
+    actions.className = 'rule-card-actions';
+    for (const [action, label] of [['edit', '编辑'], ['delete', '删除']]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `${action}-rule secondary`;
+      button.dataset.ruleIndex = String(index);
+      button.textContent = label;
+      button.setAttribute('aria-label', `${label}规则：${rule.name}`);
+      button.addEventListener('click', () => {
+        if (action === 'edit') editRule(index);
+        else void persistRules(ignoreRules.filter((_rule, position) => position !== index), index, '忽略规则已删除');
+      });
+      actions.append(button);
+    }
+    header.append(heading, actions);
+    card.append(header);
+    for (const [label, values, className] of [['域名', rule.domains, 'rule-domains'], ['忽略词', rule.ignoredNames, 'rule-words']]) {
+      const row = document.createElement('div');
+      row.className = `rule-card-row ${className}`;
+      const key = document.createElement('span');
+      key.className = 'rule-card-label';
+      key.textContent = label;
+      const chips = document.createElement('div');
+      chips.className = 'rule-chips';
+      for (const value of values) {
+        const chip = document.createElement('span');
+        chip.textContent = value;
+        chips.append(chip);
+      }
+      row.append(key, chips);
+      card.append(row);
+    }
+    return card;
+  }));
+  updateCount();
 }
 
 function render() {
@@ -150,7 +208,8 @@ $('open-settings').addEventListener('click', () => {
 $('close-settings').addEventListener('click', () => $('settings-dialog').close());
 $('settings-dialog').addEventListener('keydown', (event) => {
   if (event.key !== 'Tab') return;
-  const controls = [...$('settings-dialog').querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)')];
+  const controls = [...$('settings-dialog').querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)')]
+    .filter((control) => control.getClientRects().length > 0);
   const first = controls[0];
   const last = controls.at(-1);
   // Electron 在原生对话框末项之后会将焦点交给窗口层级。
@@ -159,7 +218,17 @@ $('settings-dialog').addEventListener('keydown', (event) => {
     (event.shiftKey ? last : first).focus();
   }
 });
-$('ignore-rule').addEventListener('change', () => editRule(Number($('ignore-rule').value)));
+$('ignore-nav').addEventListener('click', () => {
+  document.querySelector('.settings-content').scrollTop = 0;
+  $('ignore-title').focus({ preventScroll: true });
+});
+$('add-rule').addEventListener('click', () => editRule(-1));
+$('cancel-rule').addEventListener('click', () => {
+  const index = editingRule;
+  showRuleList();
+  notice('', false, 'settings-notice');
+  ($('rule-cards').children[index]?.querySelector('.edit-rule') || $('add-rule')).focus();
+});
 const lines = (id) => $(id).value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
 $('website-hosts').addEventListener('change', () => {
   const host = $('website-hosts').value;
@@ -174,37 +243,37 @@ async function persistRules(next, index, message) {
   if (!initialized || closing || savingRules) return;
   const focusedElement = document.activeElement;
   savingRules = true;
+  let saved = false;
   updateCount();
   notice('正在保存设置…', false, 'settings-notice');
   try {
     const result = await window.tabTidy.saveIgnoredNames(next);
     if (!result.ok) throw new Error(result.error);
     ignoreRules = result.rules;
-    updateRuleChoices(index);
+    showRuleList();
+    renderRuleCards();
     overrides.clear(); hasCloseResult = false; render();
     const text = `${message}，已重新分组和预选，请核对候选项。`;
     notice(text);
     notice(text, false, 'settings-notice');
+    saved = true;
   } catch (error) {
     notice(`设置保存失败：${error.message}`, true);
     notice(`设置保存失败：${error.message}`, true, 'settings-notice');
   }
   finally {
     savingRules = false; updateCount();
-    if (document.activeElement === document.body) focusedElement?.focus({ preventScroll: true });
+    if (saved && $('settings-dialog').open) ($('rule-cards').children[index]?.querySelector('.edit-rule') || $('add-rule')).focus({ preventScroll: true });
+    else if (document.activeElement === document.body) focusedElement?.focus({ preventScroll: true });
   }
 }
 $('ignore-form').addEventListener('submit', (event) => {
   event.preventDefault();
+  if (editingRule === null) return;
   const next = [...ignoreRules];
-  const index = $('ignore-rule').value === '-1' ? next.length : Number($('ignore-rule').value);
+  const index = editingRule === -1 ? next.length : editingRule;
   next[index] = { name: $('ignore-name').value, domains: lines('ignore-domains'), ignoredNames: lines('ignore-words') };
   void persistRules(next, index, '忽略规则已保存并自动应用');
-});
-$('delete-ignore').addEventListener('click', () => {
-  const index = Number($('ignore-rule').value);
-  if (index < 0) return;
-  void persistRules(ignoreRules.filter((_rule, position) => position !== index), -1, '忽略规则已删除');
 });
 $('copy-code').addEventListener('click', async () => {
   try { await window.tabTidy.copyCode(); notice('连接码已复制，请粘贴到浏览器扩展中。'); } catch (error) { notice(error.message, true); }
@@ -237,7 +306,7 @@ try {
   const state = await window.tabTidy.getState();
   ignoreRules = state.ignoreRules;
   initialized = true;
-  updateRuleChoices();
+  renderRuleCards();
   $('connection-code').value = state.token;
   sources = state.sources;
   render();

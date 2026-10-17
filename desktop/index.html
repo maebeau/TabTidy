@@ -29,7 +29,7 @@
     <div class="sidebar-foot"><span class="local-dot"></span>仅在本机处理<br><small>扩展只读取标签页标题和网址</small></div>
   </aside>
   <main>
-    <header><div><div class="eyebrow">你的浏览空间</div><h1>相似标签页</h1><p class="muted">把相似的放在一起，决定权留给你。</p></div><div class="header-actions"><span class="manual-confirm">人工确认后关闭</span><button id="open-settings" class="secondary" type="button" aria-haspopup="dialog" aria-controls="settings-dialog" disabled>设置</button></div></header>
+    <header><div><div class="eyebrow">你的浏览空间</div><h1>相似标签页</h1><p class="muted">把相似的放在一起，决定权留给你。</p></div><div class="header-actions"><span class="manual-confirm">人工确认后关闭</span><button id="open-settings" class="secondary icon-button" type="button" aria-label="设置" title="设置" aria-haspopup="dialog" aria-controls="settings-dialog" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l.6 2.3 1.6.9 2.3-.6 3 5.2-1.7 1.7v1.8l1.7 1.7-3 5.2-2.3-.6-1.6.9L15 24H9l-.6-2.3-1.6-.9-2.3.6-3-5.2 1.7-1.7v-1.8L1.5 11l3-5.2 2.3.6 1.6-.9L9 3Z" transform="translate(1 0) scale(.9)"/><circle cx="12" cy="12" r="3"/></svg></button></div></header>
     <section class="stats" aria-label="标签页统计">
       <div><strong id="tab-count">0</strong><span>已同步标签页</span></div>
       <div><strong id="group-count">0</strong><span>相似分组</span></div>
@@ -47,23 +47,39 @@
   </main>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
     <div class="settings-header"><h2 id="settings-title">设置</h2><button id="close-settings" class="secondary" type="button" autofocus>返回标签页</button></div>
-    <div class="settings-content"><section id="ignore-settings" aria-labelledby="ignore-title">
-      <h3 id="ignore-title">网站忽略规则</h3>
-      <form id="ignore-form">
-        <label for="ignore-rule">选择规则</label>
-        <select id="ignore-rule"><option value="-1">新建规则</option></select>
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="设置项">
+        <p class="settings-nav-label">偏好设置</p>
+        <button id="ignore-nav" type="button" aria-current="page" aria-controls="ignore-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>忽略规则</button>
+        <p class="settings-local">规则保存在本机<br>设置一次，持续生效</p>
+      </nav>
+      <div class="settings-content"><section id="ignore-settings" aria-labelledby="ignore-title">
+        <div class="settings-section-header"><div><h3 id="ignore-title" tabindex="-1">网站忽略规则</h3><p class="note">按网站管理公共标题文字，让相似分组更准确。</p></div><button id="add-rule" type="button"><span aria-hidden="true">＋</span> 添加规则</button></div>
+        <div id="rule-list">
+          <p id="rule-count" class="rule-count"></p>
+          <div id="rule-cards"></div>
+          <div id="rules-empty" class="rules-empty" hidden><span aria-hidden="true">＋</span><h4>还没有忽略规则</h4><p>点击“添加规则”，为网站设置要忽略的名称或板块文字。</p></div>
+        </div>
+        <section id="rule-editor" aria-labelledby="rule-editor-title" hidden>
+          <h4 id="rule-editor-title">添加规则</h4>
+          <form id="ignore-form">
         <label for="ignore-name">名称（仅用于管理）</label>
         <input id="ignore-name" placeholder="如：某某阅读站" required maxlength="128" autocomplete="off">
+        <div class="rule-form-grid"><div>
         <label for="ignore-domains">域名（每行一个）</label>
-        <textarea id="ignore-domains" rows="3" placeholder="old.example.com&#10;new.example.com" required spellcheck="false" aria-describedby="ignore-help"></textarea>
+        <textarea id="ignore-domains" rows="4" placeholder="old.example.com&#10;new.example.com" required spellcheck="false" aria-describedby="ignore-help"></textarea>
         <label class="sr-only" for="website-hosts">从已同步网站添加域名</label>
         <select id="website-hosts"><option value="">从已同步网站添加域名…</option></select>
+        </div><div>
         <label for="ignore-words">忽略词（每行一个）</label>
-        <textarea id="ignore-words" rows="3" placeholder="网站名称&#10;板块名称" required aria-describedby="ignore-help"></textarea>
-        <p id="ignore-help" class="note">所列域名共用这些忽略词，换域名时在原规则中追加即可。域名精确匹配，www 等子域名需一并列出。只忽略独立前后缀或括号标签，原始标题保留。设置会在本机记住，切换规则前请先保存修改。</p>
-        <div class="rule-actions"><button id="save-ignore" class="secondary" type="submit">保存并重新分组</button><button id="delete-ignore" class="secondary" type="button" disabled>删除此规则</button></div>
-      </form>
-    </section></div>
+        <textarea id="ignore-words" rows="4" placeholder="网站名称&#10;板块名称" required aria-describedby="ignore-help"></textarea>
+        </div></div>
+        <p id="ignore-help" class="note">所列域名共用这些忽略词，换域名时追加即可。域名精确匹配，www 等子域名需一并列出。只忽略独立前后缀或括号标签，原始标题保留。</p>
+        <div class="rule-actions"><button id="save-ignore" type="submit">保存并重新分组</button><button id="cancel-rule" class="secondary" type="button">取消</button></div>
+          </form>
+        </section>
+      </section></div>
+    </div>
     <div id="settings-notice" role="status" aria-live="polite"></div>
   </dialog>
   <template id="group-template"><article class="group"><div class="group-header"><div><label class="group-select"><input type="checkbox" class="group-checkbox"><span>全选本组</span></label><span class="group-index"></span><strong class="group-title"></strong><span class="group-size"></span></div><span class="group-reason"></span></div><div class="group-tabs"></div></article></template>
