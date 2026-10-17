@@ -53,6 +53,73 @@ test('较长标题有少量文字差异可归组，无关标题和短词不模�
   assert.deepEqual(result[0].tabs.map((tab) => tab.id).toSorted(), [1, 2]);
 });
 
+test('不规整标题的数字与版本说明变化可归组，原始标题保持不变', () => {
+  const tabs = [
+    { id: 1, title: '星河旅行 1-20 整理版', openedAt: 100 },
+    { id: 2, title: '星河旅行 1-30 更新版', openedAt: 200 },
+  ];
+  const result = analyzeTabs(tabs);
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0].reasons, ['similar-title']);
+  assert.deepEqual(result[0].tabs.map(({ id, title, selected }) => [id, title, selected]), [
+    [2, '星河旅行 1-30 更新版', false],
+    [1, '星河旅行 1-20 整理版', true],
+  ]);
+  assert.deepEqual(tabs, [
+    { id: 1, title: '星河旅行 1-20 整理版', openedAt: 100 },
+    { id: 2, title: '星河旅行 1-30 更新版', openedAt: 200 },
+  ]);
+});
+
+test('相同文字片段调整顺序后仍可识别为候选', () => {
+  const result = analyzeTabs([
+    { id: 1, title: '前端入门指南' },
+    { id: 2, title: '指南前端入门' },
+  ]);
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0].tabs.map((tab) => tab.id).toSorted(), [1, 2]);
+});
+
+test('共同主体文字在不同位置、附加说明不同也可归组', () => {
+  for (const titles of [
+    ['星河旅行 甲整理', '乙分享 星河旅行'],
+    ['星河旅行', '星河旅行个人整理'],
+    ['Chrome 标签页管理工具 使用说明', '使用教程：Chrome 标签页管理工具'],
+  ]) {
+    const result = analyzeTabs(titles.map((title, id) => ({ id, title })));
+    assert.equal(result.length, 1, titles.join(' / '));
+    assert.equal(result[0].tabs.length, 2);
+  }
+});
+
+test('仅有相同版本说明、短片段或数字不足以合并无关标题', () => {
+  for (const titles of [
+    ['星河旅行 1-20 整理版', '山海故事 1-30 更新版'],
+    ['相机参数指南 完整版', '咖啡冲煮教程 完整版'],
+    ['共同词语甲乙丙丁戊己庚辛', '共同词语子丑寅卯辰巳午未'],
+    ['𠮷野屋资料', '𠮷野屋菜单'],
+    ['12345', '67890'],
+    ['完整版', '整理版'],
+    ['首页', '主页'],
+  ]) {
+    assert.deepEqual(analyzeTabs(titles.map((title, id) => ({ id, title }))), [], titles.join(' / '));
+  }
+});
+
+test('新匹配的候选组沿用时间排序和预选，未知时间仍不自动预选', () => {
+  const tabs = [
+    { id: 1, title: '星河旅行 甲整理', openedAt: 200 },
+    { id: 2, title: '乙分享 星河旅行', openedAt: 100 },
+  ];
+  for (const direction of ['asc', 'desc']) {
+    const group = analyzeTabs(tabs, { sortBy: 'time', direction })[0];
+    assert.deepEqual(group.tabs.map(({ id, selected }) => [id, selected]), direction === 'asc'
+      ? [[2, false], [1, true]] : [[1, false], [2, true]]);
+  }
+  const unknown = analyzeTabs([tabs[0], { ...tabs[1], openedAt: null }], { sortBy: 'time' })[0];
+  assert.deepEqual(unknown.tabs.map(({ id, selected }) => [id, selected]), [[1, false], [2, false]]);
+});
+
 test('时间排序支持升降序；自然排序支持升序', () => {
   const tabs = [
     { id: 2, title: '书 第2章', openedAt: 300 },

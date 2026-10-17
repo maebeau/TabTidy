@@ -5,7 +5,7 @@ function titleKey(title) {
   const chapter = /第[\d〇零一二三四五六七八九十百千万两]+[章节回卷集部]/u.exec(normalized);
   const prefix = chapter && chapter.index > 0 ? normalized.slice(0, chapter.index) : normalized;
   const compact = prefix.replace(/[\p{P}\p{Z}\p{S}\s]/gu, '');
-  return compact.replace(/\d+$/u, '') || compact;
+  return compact.replace(/\d+|(?:整理|更新|完整|精校|修订)版/gu, '') || compact;
 }
 
 function bigrams(text) {
@@ -16,11 +16,21 @@ function bigrams(text) {
 function similarTitles(a, b, gramsA, gramsB) {
   if (!a || !b) return false;
   if (a === b) return true;
-  if (Math.min([...a].length, [...b].length) < 6) return false;
+  const charactersA = [...a];
+  const charactersB = [...b];
+  if (Math.min(charactersA.length, charactersB.length) < 4) return false;
   let common = 0;
   for (const gram of gramsA) if (gramsB.has(gram)) common++;
-  // shortcut: 只比较标题字符对，真实样本误判较多时再加入网站规则。
-  return (2 * common) / (gramsA.size + gramsB.size) >= 0.85;
+  if ((2 * common) / (gramsA.size + gramsB.size) >= 0.8) return true;
+
+  const shorter = charactersA.length <= charactersB.length ? charactersA : charactersB;
+  const longer = shorter === charactersA ? b : a;
+  const minimum = Math.max(4, Math.ceil(Math.max(charactersA.length, charactersB.length) / 2));
+  // shortcut: 共同长片段也可能是站点后缀，误报较多时用真实标题校准。
+  for (let index = 0; index <= shorter.length - minimum; index++) {
+    if (longer.includes(shorter.slice(index, index + minimum).join(''))) return true;
+  }
+  return false;
 }
 
 export function analyzeTabs(tabs, options = {}) {
