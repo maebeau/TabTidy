@@ -13,7 +13,7 @@ body {
   display:flex;
   min-height:100vh
 }
-button,input,select {
+button,input,select,textarea {
   font:inherit
 }
 button {
@@ -40,7 +40,7 @@ button:disabled {
 .secondary:hover {
   background:#edf3ec
 }
-button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible {
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible {
   outline:3px solid #66a78b;
   outline-offset:3px
 }
@@ -186,7 +186,7 @@ h1 {
   margin:8px 0 4px;
   font-weight:650
 }
-.read-only {
+.manual-confirm {
   font-size:11px;
   border:1px solid #dae4d6;
   color:#5d6c54;
@@ -239,11 +239,15 @@ select {
   font-size:12px;
   padding:9px
 }
-#export {
+#close-tabs {
   font-size:12px;
-  white-space:nowrap
+  white-space:nowrap;
+  background:#9b4435
 }
-#export-count {
+#close-tabs:hover {
+  background:#81372d
+}
+#close-count {
   background:#ffffff24;
   border-radius:4px;
   padding:2px 6px;
@@ -255,7 +259,44 @@ select {
   margin:13px 0 20px;
   line-height:1.7
 }
+#ignore-settings {
+  margin:0 0 18px;
+  padding:13px 16px;
+  border:1px solid #dce3d7;
+  border-radius:8px;
+  background:#fff
+}
+#ignore-form {
+  margin-top:14px
+}
+#ignore-form label {
+  display:block;
+  margin:12px 0 7px;
+  font-size:12px
+}
+#ignore-form input,#ignore-form textarea,#ignore-form select {
+  display:block;
+  width:100%;
+  min-width:0;
+  padding:9px;
+  border:1px solid #d8e1d3;
+  border-radius:6px;
+  background:#f9fbf7;
+  color:inherit
+}
+#ignore-form textarea {
+  resize:vertical
+}
+#website-hosts {
+  margin-top:8px
+}
+.rule-actions {
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap
+}
 #notice {
+  overflow-wrap:anywhere;
   font-size:12px;
   color:#59764b;
   line-height:1.7;
@@ -291,6 +332,15 @@ select {
   display:flex;
   align-items:center;
   gap:10px
+}
+.group-select {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:12px;
+  white-space:nowrap;
+  flex-shrink:0;
+  cursor:pointer
 }
 .group-index {
   font-size:10px;
@@ -330,7 +380,7 @@ select {
 .tab-row:has(input:checked) {
   background:#f2f7ec
 }
-.tab-row input {
+.tab-row input,.group-checkbox {
   width:16px;
   height:16px;
   accent-color:#59804a;

@@ -1,7 +1,13 @@
+import { normalizeIgnoredNamesByHost } from './title-rules.js';
+
 const naturalOrder = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' });
 
-function titleKey(title) {
-  const normalized = title.normalize('NFKC').toLowerCase();
+function titleKey(title, ignoredNames) {
+  let normalized = title.normalize('NFKC').toLowerCase();
+  if (ignoredNames) {
+    let previous;
+    do { previous = normalized; normalized = normalized.replace(ignoredNames, ''); } while (normalized !== previous);
+  }
   const chapter = /第[\d〇零一二三四五六七八九十百千万两]+[章节回卷集部]/u.exec(normalized);
   const prefix = chapter && chapter.index > 0 ? normalized.slice(0, chapter.index) : normalized;
   const compact = prefix.replace(/[\p{P}\p{Z}\p{S}\s]/gu, '');
@@ -26,7 +32,7 @@ function similarTitles(a, b, gramsA, gramsB) {
   const shorter = charactersA.length <= charactersB.length ? charactersA : charactersB;
   const longer = shorter === charactersA ? b : a;
   const minimum = Math.max(4, Math.ceil(Math.max(charactersA.length, charactersB.length) / 2));
-  // shortcut: 共同长片段也可能是站点后缀，误报较多时用真实标题校准。
+  // shortcut: 未配置的站点公共文字仍可能误匹配，出现误报时补充该站点的忽略名称。
   for (let index = 0; index <= shorter.length - minimum; index++) {
     if (longer.includes(shorter.slice(index, index + minimum).join(''))) return true;
   }
@@ -38,9 +44,19 @@ export function analyzeTabs(tabs, options = {}) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {
     throw new TypeError('options must be an object');
   }
-  const { sortBy = 'natural', direction = 'desc' } = options;
+  const { sortBy = 'natural', direction = 'desc', ignoredNamesByHost = {} } = options;
   if (!['natural', 'time'].includes(sortBy)) throw new TypeError('sortBy must be natural or time');
   if (!['asc', 'desc'].includes(direction)) throw new TypeError('direction must be asc or desc');
+  const rules = normalizeIgnoredNamesByHost(ignoredNamesByHost);
+  const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const separator = '[\\p{P}\\p{Z}\\p{S}\\s]';
+  const ignoredPatterns = new Map(Object.entries(rules).map(([host, names]) => {
+    const words = names.map((name) => name.toLowerCase()).sort((a, b) => b.length - a.length).map(escape).join('|');
+    const edges = `^${separator}*(?:${words})(?=$|${separator})|(?<![\\p{L}\\p{N}])(?:${words})${separator}*$`;
+    const labels = [['[', ']'], ['(', ')'], ['【', '】'], ['「', '」'], ['『', '』']]
+      .map(([left, right]) => `${escape(left)}\\s*(?:${words})\\s*${escape(right)}`).join('|');
+    return [host, new RegExp(`${edges}|${labels}`, 'gu')];
+  }));
   const ids = new Set();
   for (const tab of tabs) {
     if (!tab || typeof tab !== 'object' || Array.isArray(tab)) throw new TypeError('each tab must be an object');
@@ -58,7 +74,11 @@ export function analyzeTabs(tabs, options = {}) {
     }
   }
   const order = direction === 'asc' ? 1 : -1;
-  const keys = tabs.map((tab) => titleKey(tab.title));
+  const keys = tabs.map((tab) => {
+    const url = tab.url && new URL(tab.url);
+    const pattern = url && ['http:', 'https:'].includes(url.protocol) ? ignoredPatterns.get(url.hostname.replace(/\.$/, '')) : undefined;
+    return titleKey(tab.title, pattern);
+  });
   const grams = keys.map(bigrams);
   const parents = tabs.map((_, index) => index);
   const reasons = tabs.map(() => new Set());

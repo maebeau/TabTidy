@@ -2,6 +2,57 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { analyzeTabs } from '../src/core.js';
 
+test('按网站忽略公共名称，消除无关主体误分组且不修改原标题', () => {
+  const tabs = ['a xxxx', 'bc xxxx', 'd xxxx'].map((title, id) => ({ id, title, url: `https://site.example/${id}` }));
+  const before = structuredClone(tabs);
+  assert.equal(analyzeTabs(tabs).length, 1);
+  assert.deepEqual(analyzeTabs(tabs, { ignoredNamesByHost: { 'site.example': ['xxxx'] } }), []);
+  assert.deepEqual(tabs, before);
+  assert.equal(analyzeTabs(tabs, { ignoredNamesByHost: { 'other.example': ['xxxx'] } }).length, 1);
+});
+
+test('忽略名称可作为独立前后缀或括号标签，保留正文内的相同文字', () => {
+  const ignoredNamesByHost = { 'site.example': ['xxxx', '小说下载区', '站点 (测试)+'] };
+  for (const titles of [
+    ['xxxx a', 'xxxx bc'], ['【小说下载区】 a', '【小说下载区】 bc'],
+    ['a - xxxx - 小说下载区', 'bc - xxxx - 小说下载区'],
+    ['a 站点 (测试)+', 'bc 站点 (测试)+'],
+    ['a 【xxxx】 内容', 'bc 【xxxx】 页面'],
+    ['xxxx', '【xxxx】'],
+  ]) {
+    assert.deepEqual(analyzeTabs(titles.map((title, id) => ({ id, title, url: `https://site.example/${id}` })), { ignoredNamesByHost }), [], titles.join(' / '));
+  }
+  for (const titles of [
+    ['探索 xxxx 的起源', '探索 yyyy 的起源'],
+    ['穿越xxxx世界', '穿越yyyy世界'],
+  ]) {
+    const tabs = titles.map((title, id) => ({ id, title, url: `https://site.example/${id}` }));
+    assert.deepEqual(analyzeTabs(tabs, { ignoredNamesByHost }), analyzeTabs(tabs), '正文中的相同文字不应被忽略设置改变');
+  }
+});
+
+test('不同网站去除各自名称后仍可归组，原始自然/时间排序与重复网址规则保持有效', () => {
+  const tabs = [
+    { id: 1, title: '星河旅行 1-2 - 甲方原创资源分享交流社区', url: 'https://a.example/2', openedAt: 100 },
+    { id: 2, title: '星河旅行 1-10 - 乙方电子阅读互助讨论平台', url: 'https://b.example/10', openedAt: 200 },
+  ];
+  const ignoredNamesByHost = { 'a.example': ['甲方原创资源分享交流社区'], 'b.example': ['乙方电子阅读互助讨论平台'] };
+  assert.deepEqual(analyzeTabs(tabs), []);
+  assert.deepEqual(analyzeTabs(tabs, { ignoredNamesByHost })[0].tabs.map(({ id, selected }) => [id, selected]), [[2, false], [1, true]]);
+  assert.deepEqual(analyzeTabs(tabs, { ignoredNamesByHost, sortBy: 'time', direction: 'asc' })[0].tabs.map(({ id, selected }) => [id, selected]), [[1, false], [2, true]]);
+  assert.ok(analyzeTabs(tabs.map((tab) => ({ ...tab, openedAt: null })), { ignoredNamesByHost, sortBy: 'time' })[0].tabs.every((tab) => !tab.selected));
+  assert.deepEqual(analyzeTabs([{ id: 1, title: 'xxxx', url: 'https://a.example/same' }, { id: 2, title: 'xxxx', url: 'https://a.example/same' }], { ignoredNamesByHost: { 'a.example': ['xxxx'] } })[0].reasons, ['duplicate-url']);
+});
+
+test('忽略名称按精确域名生效，兼容域名大小写、标题全半角，不扩散到子域名或无网址项', () => {
+  const rules = { ' SITE.EXAMPLE. ': ['ＸＸＸＸ'] };
+  const pair = (host) => ['a XXXX', 'bc xxxx'].map((title, id) => ({ id, title, ...(host ? { url: `${host}/${id}` } : {}) }));
+  assert.deepEqual(analyzeTabs(pair('http://SITE.EXAMPLE:8080'), { ignoredNamesByHost: rules }), []);
+  for (const host of ['https://sub.site.example', 'https://other.example', 'file://site.example', null]) {
+    assert.equal(analyzeTabs(pair(host), { ignoredNamesByHost: rules }).length, 1);
+  }
+});
+
 test('重复网址归组，默认自然降序保留首项并预选其余项', () => {
   const result = analyzeTabs([
     { id: 1, title: '页面 A', url: 'https://example.com/book' },

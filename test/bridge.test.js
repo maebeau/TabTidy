@@ -44,3 +44,62 @@ test('网页来源、恶意字段、重复 ID 和过量数据被拒绝且不污�
   snapshot[0].tabs.length = 0;
   assert.equal(bridge.snapshot()[0].tabs.length, 1);
 });
+
+test('关闭只发给对应浏览器会话，结果需认证且匹配请求；离线、过期快照和旧扩展不执行', async (t) => {
+  const token = 'e'.repeat(32);
+  const bridge = await startBridge({ token, port: 0 });
+  t.after(() => bridge.close());
+  const post = (path, data, code = token) => fetch(`${bridge.url}${path}`, { method: 'POST',
+    headers: { Authorization: `Bearer ${code}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const source = { sourceId: 'chrome', sessionId: 'session-one', browser: 'Chrome',
+    tabs: [{ id: 1, title: '书 第1章', url: 'https://example.com/1' }] };
+  await post('/tabs', source);
+  await post('/tabs', { ...source, sourceId: 'edge', sessionId: 'session-two', browser: 'Edge' });
+  const selected = bridge.snapshot().flatMap((item) => item.tabs);
+  assert.equal((await post('/commands', source, 'wrong')).status, 401);
+  assert.equal((await post('/commands', { ...source, sessionId: 'old' })).status, 409);
+  assert.equal((await post('/close', source)).status, 404, 'HTTP 不提供发起关闭的接口');
+  const poll = await post('/commands', source);
+  const closing = bridge.closeTabs(selected);
+  const { command } = await poll.json();
+  assert.equal(command.type, 'close-tabs');
+  assert.equal(command.sessionId, source.sessionId);
+  assert.deepEqual(command.tabs, source.tabs);
+  const reply = { ...source, requestId: command.requestId, results: [{ id: 1, status: 'closed' }] };
+  assert.equal((await post('/results', { ...reply, sourceId: 'edge' })).status, 409);
+  assert.equal((await post('/results', { ...reply, results: [{ id: 2, status: 'closed' }] })).status, 400);
+  assert.equal((await post('/results', reply)).status, 200);
+  const results = await closing;
+  assert.equal(results[0].id, 'chrome:1');
+  assert.equal(results[0].status, 'closed');
+  assert.equal(results[1].id, 'edge:1');
+  assert.equal(results[1].status, 'skipped');
+  assert.equal((await post('/results', reply)).status, 409, '已完成指令不能重放结果');
+  await post('/tabs', { ...source, tabs: [{ ...source.tabs[0], url: 'https://example.com/new' }] });
+  assert.equal((await bridge.closeTabs([selected[0]]))[0].status, 'skipped');
+  await post('/tabs', { ...source, sessionId: 'new-session' });
+  assert.match((await bridge.closeTabs([selected[0]]))[0].error, /会话已变化/);
+  await post('/tabs', { ...source, sessionId: undefined });
+  assert.match((await bridge.closeTabs(bridge.snapshot()[0].tabs))[0].error, /新版扩展/);
+  await assert.rejects(bridge.closeTabs([selected[0], selected[0]]), /关闭清单无效/);
+});
+
+test('关闭超时报告结果未知，过期指令不会留待扩展稍后执行', async (t) => {
+  const token = 'f'.repeat(32);
+  const bridge = await startBridge({ token, port: 0 });
+  t.after(() => bridge.close());
+  const source = { sourceId: 'chrome', sessionId: 'session', browser: 'Chrome',
+    tabs: [{ id: 1, title: '书', url: 'https://example.com/1' }] };
+  const post = (path, data) => fetch(`${bridge.url}${path}`, { method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  await post('/tabs', source);
+  const poll = await post('/commands', source);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const closing = bridge.closeTabs(bridge.snapshot()[0].tabs);
+  t.mock.timers.tick(30000);
+  const results = await closing;
+  t.mock.timers.reset();
+  assert.equal(results[0].status, 'unknown');
+  const { command } = await poll.json();
+  assert.equal((await post('/results', { ...source, requestId: command.requestId, results: [{ id: 1, status: 'closed' }] })).status, 409);
+});

@@ -5,12 +5,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { analyzeTabs } from '../src/core.js';
 import { startBridge } from './bridge.js';
+import { loadIgnoreRules, saveIgnoreRules } from './ignore-rules.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const pageURL = 'tabtidy://app/index.html';
 protocol.registerSchemesAsPrivileged([{ scheme: 'tabtidy', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 let window;
 let bridge;
+let closingTabs = false;
 
 async function start() {
   await app.whenReady();
@@ -25,12 +27,15 @@ async function start() {
     await mkdir(dirname(configPath), { recursive: true });
     await writeFile(configPath, JSON.stringify({ token }), { mode: 0o600, flag: 'wx' });
   }
+  const rulesPath = join(app.getPath('userData'), 'ignored-names.json');
+  let ignoreRules = await loadIgnoreRules(rulesPath);
   bridge = await startBridge({ token, onUpdate: (sources) => {
     if (window && !window.isDestroyed()) window.webContents.send('sources-updated', sources);
   } });
   const files = new Map([
     ['/index.html', join(directory, 'index.html')], ['/style.css', join(directory, 'style.css')],
     ['/renderer.js', join(directory, 'renderer.js')], ['/core.js', join(directory, '../src/core.js')],
+    ['/title-rules.js', join(directory, '../src/title-rules.js')],
   ]);
   protocol.handle('tabtidy', (request) => {
     const url = new URL(request.url);
@@ -43,21 +48,34 @@ async function start() {
     if (event.sender !== window?.webContents || event.senderFrame?.url !== pageURL) throw new Error('请求来源无效。');
     return callback(...args);
   });
-  handle('get-state', () => ({ token, sources: bridge.snapshot() }));
+  handle('get-state', () => ({ token, sources: bridge.snapshot(), ignoreRules }));
+  handle('save-ignored-names', async (rules) => {
+    if (closingTabs) return { ok: false, error: '正在关闭标签页，请稍后再保存设置。' };
+    try {
+      ignoreRules = await saveIgnoreRules(rulesPath, rules);
+      return { ok: true, rules: ignoreRules };
+    } catch (error) { return { ok: false, error: error.message }; }
+  });
   handle('copy-code', () => clipboard.writeText(token));
   handle('extension-folder', async () => {
     const error = await shell.openPath(extensionPath);
     if (error) throw new Error(error);
   });
-  handle('export-tabs', async (tabs) => {
-    if (!Array.isArray(tabs) || tabs.length > 5000) throw new Error('导出清单无效。');
+  handle('close-tabs', async (tabs) => {
+    if (closingTabs) throw new Error('正在关闭标签页，请稍候。');
+    if (!Array.isArray(tabs) || !tabs.length || tabs.length > 5000) throw new Error('关闭清单无效。');
     analyzeTabs(tabs);
-    const { canceled, filePath } = await dialog.showSaveDialog(window, {
-      title: '导出已选标签页', defaultPath: 'TabTidy-已选标签页.json', filters: [{ name: 'JSON 清单', extensions: ['json'] }],
-    });
-    if (canceled || !filePath) return false;
-    await writeFile(filePath, JSON.stringify(tabs, null, 2), 'utf8');
-    return true;
+    closingTabs = true;
+    try {
+      const preview = tabs.slice(0, 20).map((tab) => `${tab.browser} · ${tab.title || '无标题'}\n${tab.url || '网址未知'}`).join('\n\n');
+      const { response } = await dialog.showMessageBox(window, {
+        type: 'warning', title: '确认关闭标签页', message: `关闭已勾选的 ${tabs.length} 个标签页？`,
+        detail: `关闭可能丢失页面中未保存的内容。\n\n${preview}${tabs.length > 20 ? `\n\n另有 ${tabs.length - 20} 项，请在主界面核对完整清单。` : ''}`,
+        buttons: ['取消', '关闭已选标签页'], defaultId: 0, cancelId: 0, noLink: true,
+      });
+      if (response !== 1) return { canceled: true, results: [] };
+      return { canceled: false, results: await bridge.closeTabs(tabs) };
+    } finally { closingTabs = false; }
   });
   window = new BrowserWindow({ width: 1180, height: 800, minWidth: 980, minHeight: 640, title: 'TabTidy',
     backgroundColor: '#f6f7f4', show: false, autoHideMenuBar: true,
