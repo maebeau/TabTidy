@@ -53,7 +53,7 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
       const source = sources.get(tab.sourceId);
       const current = source?.tabs.find((item) => item.id === tab.id);
       let error;
-      if (!source?.sessionId) error = '请重新加载新版扩展并同步。';
+      if (!source?.sessionId) error = '扩展版本过旧，无法关闭标签页。请用桌面端“打开扩展文件夹”中的新版文件替换原扩展目录，在浏览器扩展管理页点击“重新加载”，再同步。仅重新同步不会升级扩展。';
       else if (source.sessionId !== tab.sessionId) error = '浏览器会话已变化，请重新同步后选择。';
       else if (!current || current.url !== tab.url || current.title !== tab.title || !current.url) error = '标签页已关闭、页面已变化或网址未知。';
       if (error) { results.set(tab.id, { id: tab.id, status: 'skipped', error }); continue; }

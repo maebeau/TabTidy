@@ -80,7 +80,9 @@ test('关闭只发给对应浏览器会话，结果需认证且匹配请求；�
   await post('/tabs', { ...source, sessionId: 'new-session' });
   assert.match((await bridge.closeTabs([selected[0]]))[0].error, /会话已变化/);
   await post('/tabs', { ...source, sessionId: undefined });
-  assert.match((await bridge.closeTabs(bridge.snapshot()[0].tabs))[0].error, /新版扩展/);
+  const outdated = (await bridge.closeTabs(bridge.snapshot()[0].tabs))[0];
+  assert.equal(outdated.status, 'skipped');
+  assert.match(outdated.error, /扩展版本过旧.*打开扩展文件夹.*替换原扩展目录.*重新加载.*再同步.*仅重新同步不会升级扩展/);
   await assert.rejects(bridge.closeTabs([selected[0], selected[0]]), /关闭清单无效/);
 });
 
