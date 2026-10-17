@@ -1,0 +1,14 @@
+{
+  "name": "tabtidy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/core.js",
+  "scripts": {
+    "test": "node --test",
+    "demo": "node cli.js examples/tabs.json"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

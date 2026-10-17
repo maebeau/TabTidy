@@ -1,0 +1,41 @@
+[
+  {
+    "id": "novel-10",
+    "title": "星河旅行 第10章 出发",
+    "url": "https://example.com/novel/chapter-10",
+    "openedAt": 1792200000000
+  },
+  {
+    "id": "novel-11",
+    "title": "星河旅行 第11章 重逢",
+    "url": "https://example.com/novel/chapter-11",
+    "openedAt": 1792286400000
+  },
+  {
+    "id": "duplicate-old",
+    "title": "旧标题",
+    "url": "https://example.com/article",
+    "openedAt": 1792200000000
+  },
+  {
+    "id": "duplicate-new",
+    "title": "新标题",
+    "url": "https://example.com/article",
+    "openedAt": 1792286400000
+  },
+  {
+    "id": "note-1",
+    "title": "阅读笔记1",
+    "url": "https://example.com/note/1"
+  },
+  {
+    "id": "note-2",
+    "title": "阅读笔记1-2",
+    "url": "https://example.com/note/2"
+  },
+  {
+    "id": "unrelated",
+    "title": "天气预报",
+    "url": "https://example.com/weather"
+  }
+]
