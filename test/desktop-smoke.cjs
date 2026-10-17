@@ -33,6 +33,7 @@ async function waitFor(check) {
     selected: group.querySelectorAll('.tab-row input:checked').length,
   }))`);
   await waitFor(() => js("Boolean(document.getElementById('connection-code').value)"));
+  assert.equal(await js("document.getElementById('back-to-top').hidden"), true, '顶部默认隐藏回到顶部按钮');
   const token = await js('window.tabTidy.getState().then(state => state.token)');
   assert.equal(await js("document.getElementById('settings-dialog').open"), false, '设置默认关闭');
   assert.equal(await js("document.querySelector('main #ignore-settings')"), null, '主列表不再包含忽略规则表单');
@@ -52,6 +53,42 @@ async function waitFor(check) {
     });
     assert.equal(response.status, 200);
   };
+  const longTabs = Array.from({ length: 40 }, (_, index) => ({ id: index + 100,
+    title: `回到顶部测试 第${index + 1}章`, url: `https://example.com/scroll/${index + 1}` }));
+  await post('chrome-test', 'Chrome', longTabs);
+  await waitFor(() => js("document.querySelectorAll('.tab-row').length === 40"));
+  const selectedBeforeScroll = await js("Array.from(document.querySelectorAll('.tab-row input:checked'), input => input.dataset.tabId)");
+  await js('window.scrollTo(0, 600)');
+  await waitFor(() => js("!document.getElementById('back-to-top').hidden"));
+  assert.equal(await js("(() => { const button = document.getElementById('back-to-top'); const rect = button.getBoundingClientRect(); return button.getAttribute('aria-label') === '回到顶部' && rect.width >= 44 && rect.height >= 44 && rect.bottom <= innerHeight && rect.right <= innerWidth; })()"), true, '按钮应有可访问名称且固定在视口内');
+  await mkdir('artifacts', { recursive: true });
+  await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  await writeFile('artifacts/back-to-top-preview.png', (await window.webContents.capturePage()).toPNG());
+  await js("document.getElementById('back-to-top').click()");
+  await waitFor(() => js("window.scrollY === 0 && document.getElementById('back-to-top').hidden"));
+  assert.equal(await js('document.activeElement.id'), 'page-title', '回到顶部后焦点应移至页面标题');
+  await js('window.scrollTo(0, 600)');
+  await waitFor(() => js("!document.getElementById('back-to-top').hidden"));
+  await js("document.getElementById('back-to-top').focus()");
+  window.focus();
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+  window.webContents.sendInputEvent({ type: 'char', keyCode: '\r' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+  await waitFor(() => js('window.scrollY === 0'));
+  assert.equal(await js('document.activeElement.id'), 'page-title', '键盘也应可激活回到顶部');
+  window.webContents.debugger.attach('1.3');
+  try {
+    await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    assert.equal(await js("matchMedia('(prefers-reduced-motion: reduce)').matches"), true);
+    await js('window.scrollTo(0, 600)');
+    await waitFor(() => js("!document.getElementById('back-to-top').hidden"));
+    assert.equal(await js("document.getElementById('back-to-top').click(); window.scrollY"), 0, '减少动态效果时应直接返回，不播放滚动动画');
+  } finally { window.webContents.debugger.detach(); }
+  assert.deepEqual(await js("Array.from(document.querySelectorAll('.tab-row input:checked'), input => input.dataset.tabId)"), selectedBeforeScroll, '回到顶部不应改变勾选');
+  await js('window.scrollTo(0, 600)');
+  await waitFor(() => js("!document.getElementById('back-to-top').hidden"));
+  await post('chrome-test', 'Chrome', []);
+  await waitFor(() => js("document.querySelectorAll('.tab-row').length === 0 && document.getElementById('back-to-top').hidden"));
   const received = [];
   const receiveClose = async (sourceId, execute) => {
     const stop = new AbortController();
@@ -357,7 +394,7 @@ async function waitFor(check) {
   await writeFile('artifacts/auto-preselect-preview.png', (await window.webContents.capturePage()).toPNG());
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   clearTimeout(timeout);
-  console.log('桌面验证通过：自动预选开关、手动覆盖、同步/排序/规则保存保留选择、开关记忆、设置分栏和规则卡片、键盘焦点、最小窗口、双浏览器、分组勾选、确认关闭、迁移及恶意文本处理。');
+  console.log('桌面验证通过：回到顶部、键盘激活及减少动态效果、自动预选开关、手动覆盖、同步/排序/规则保存保留选择、开关记忆、设置分栏和规则卡片、键盘焦点、最小窗口、双浏览器、分组勾选、确认关闭、迁移及恶意文本处理。');
   await rm(temporary, { recursive: true, force: true });
   app.exit(0);
 })().catch((error) => { console.error(error); app.exit(1); });

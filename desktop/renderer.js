@@ -13,6 +13,16 @@ let initialized = false;
 let editingRule = null;
 let autoPreselect = true;
 
+function updateBackToTop() {
+  $('back-to-top').hidden = window.scrollY <= 300;
+}
+window.addEventListener('scroll', updateBackToTop, { passive: true });
+window.addEventListener('resize', updateBackToTop);
+$('back-to-top').addEventListener('click', () => {
+  $('page-title').focus({ preventScroll: true });
+  window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+});
+
 function notice(text, error = false, id = 'notice') {
   $(id).textContent = text;
   $(id).classList.toggle('error', error);
@@ -201,6 +211,7 @@ function render() {
     : '每组首项建议保留，其余自动预选；你可以随时调整。更换排序会重新预选。';
   updateCount();
   window.scrollTo(0, scrollPosition);
+  updateBackToTop();
   focusTarget?.focus({ preventScroll: true });
 }
 

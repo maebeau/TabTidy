@@ -199,6 +199,16 @@ header {
   width:21px;
   height:21px
 }
+#back-to-top {
+  position:fixed;
+  right:24px;
+  bottom:24px;
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  box-shadow:0 4px 16px #263b3426;
+  z-index:1
+}
 h1 {
   font-size:29px;
   letter-spacing:-1px;
