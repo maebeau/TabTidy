@@ -2,6 +2,7 @@ let timer;
 let pending = Promise.resolve();
 let polling = false;
 const sessionId = crypto.randomUUID();
+const reconnectAlarm = 'tabtidy-reconnect';
 
 async function request(path, data, connectionCode, timeout = 5000) {
   const response = await fetch(`http://127.0.0.1:37843${path}`, {
@@ -14,7 +15,7 @@ async function request(path, data, connectionCode, timeout = 5000) {
 }
 
 async function reportError(error) {
-  const message = error.message === 'Failed to fetch' ? '无法连接桌面端，请先打开 TabTidy 并重新同步。' : error.message;
+  const message = error.message === 'Failed to fetch' ? '桌面端暂未连接，扩展会自动重连。请确认 TabTidy 已打开。' : error.message;
   await chrome.storage.local.set({ lastError: message });
   await chrome.action.setBadgeText({ text: '!' });
   await chrome.action.setBadgeBackgroundColor({ color: '#a45b3f' });
@@ -73,6 +74,7 @@ async function pollCommands() {
 async function syncTabs() {
   const settings = await chrome.storage.local.get(['connectionCode', 'sourceId']);
   if (!settings.connectionCode) return { ok: false, error: '请先粘贴桌面端的连接码。' };
+  if (!await chrome.alarms.get(reconnectAlarm)) await chrome.alarms.create(reconnectAlarm, { periodInMinutes: 0.5 });
   const sourceId = settings.sourceId || crypto.randomUUID();
   if (!settings.sourceId) await chrome.storage.local.set({ sourceId });
   const browser = /Edg\//.test(navigator.userAgent) ? 'Edge' : 'Chrome';
@@ -108,4 +110,7 @@ chrome.tabs.onUpdated.addListener((_id, change) => {
   if (change.title !== undefined || change.url !== undefined) scheduleSync();
 });
 chrome.runtime.onStartup.addListener(scheduleSync);
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === reconnectAlarm && !polling) void queueSync().catch(() => {});
+});
 void queueSync().catch(() => {});

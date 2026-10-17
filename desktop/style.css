@@ -98,6 +98,19 @@ aside {
 #sources {
   margin-bottom:25px
 }
+.source-filter-label {
+  display:block;
+  margin-bottom:7px;
+  color:#5d6c54;
+  font-size:12px
+}
+#source-filter {
+  width:100%;
+  margin-bottom:4px
+}
+.source-state {
+  font-weight:600
+}
 .source {
   background:#f9fbf6;
   border:1px solid #dce5d8;

@@ -12,14 +12,17 @@
   <aside>
     <div class="brand"><span class="brand-icon" aria-hidden="true">▤</span><span>TabTidy<small>给标签页一点秩序</small></span></div>
     <div class="section-label">浏览器连接</div>
+    <label class="source-filter-label" for="source-filter">查看来源</label>
+    <select id="source-filter" disabled><option value="">全部浏览器</option></select>
     <div id="sources"><p class="muted">等待浏览器同步</p></div>
     <details id="setup" open>
-      <summary>连接 Chrome / Edge</summary>
+      <summary>首次配对 Chrome / Edge</summary>
       <ol>
         <li>打开扩展文件夹。</li>
         <li>在浏览器扩展管理页开启开发者模式，选择“加载已解压的扩展”，选中该文件夹。</li>
         <li>点击扩展图标，粘贴下方连接码并同步。</li>
       </ol>
+      <p class="note">配对一次，以后自动连接。桌面端暂未打开时，扩展会自动重试。</p>
       <p class="address">Chrome：chrome://extensions<br>Edge：edge://extensions</p>
       <button id="open-extension" class="secondary">打开扩展文件夹</button>
       <label class="code-label" for="connection-code">本机连接码</label>

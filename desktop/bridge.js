@@ -41,7 +41,11 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
   const sources = new Map();
   const polls = new Map();
   const commands = new Map();
-  const snapshot = () => structuredClone([...sources.values()]);
+  let revision = 0;
+  const snapshot = () => structuredClone([...sources.values()].map((source) => ({ ...source,
+    connected: Boolean(source.sessionId && (polls.get(source.sourceId)?.sessionId === source.sessionId
+      || [...commands.values()].some((command) => command.sourceId === source.sourceId && command.sessionId === source.sessionId))),
+  })));
   const closeTabs = async (tabs) => {
     if (!Array.isArray(tabs) || !tabs.length || tabs.length > 5000
       || tabs.some((tab) => !tab || typeof tab.id !== 'string' || typeof tab.sourceId !== 'string'
@@ -69,6 +73,7 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
         const complete = (outcomes) => {
           clearTimeout(timer);
           commands.delete(requestId);
+          onUpdate(snapshot());
           if (outcomes) outcomes.forEach((item) => results.set(item.id, item));
           else finish('unknown', '未收到浏览器结果，请检查浏览器实际状态后再操作。');
           resolve();
@@ -99,7 +104,7 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
     try {
       const data = JSON.parse(await readBody(request));
       if (request.url === '/tabs') {
-        const source = validateSnapshot(data);
+        const source = { ...validateSnapshot(data), revision: ++revision };
         const poll = polls.get(source.sourceId);
         if (poll && poll.sessionId !== source.sessionId) poll.finish(null);
         sources.set(source.sourceId, source);
@@ -113,16 +118,17 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
         polls.get(data.sourceId)?.finish(null);
         const poll = { sessionId: data.sessionId, finish: (command) => {
           clearTimeout(timer);
-          if (polls.get(data.sourceId) === poll) polls.delete(data.sourceId);
+          if (polls.get(data.sourceId) === poll) { polls.delete(data.sourceId); onUpdate(snapshot()); }
           send(200, { command });
         } };
         const timer = setTimeout(() => poll.finish(null), 20000);
         polls.set(data.sourceId, poll);
         response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
         response.flushHeaders();
+        onUpdate(snapshot());
         response.once('close', () => {
           clearTimeout(timer);
-          if (polls.get(data.sourceId) === poll) polls.delete(data.sourceId);
+          if (polls.get(data.sourceId) === poll) { polls.delete(data.sourceId); onUpdate(snapshot()); }
         });
         return;
       }

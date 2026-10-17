@@ -35,6 +35,7 @@ function updateCount() {
   const busy = !initialized || closing || savingRules;
   $('close-tabs').disabled = busy || count === 0;
   for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #auto-preselect, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
+  $('source-filter').disabled = busy || sources.length === 0;
 }
 
 function updateWebsiteChoices(tabs) {
@@ -130,19 +131,18 @@ function renderRuleCards() {
   updateCount();
 }
 
-function render() {
-  const focusedId = document.activeElement?.dataset.tabId;
-  const focusedGroupId = document.activeElement?.dataset.groupId;
-  const scrollPosition = window.scrollY;
-  let focusTarget;
-  const tabs = sources.flatMap((source) => source.tabs);
-  const ignoredNamesByHost = Object.fromEntries(ignoreRules.flatMap((rule) => rule.domains.map((host) => [host, rule.ignoredNames])));
-  groups = analyzeTabs(tabs, { sortBy: $('sort-by').value, direction: $('direction').value, ignoredNamesByHost });
-  updateWebsiteChoices(tabs);
-  const activeIds = new Set(tabs.map((tab) => tab.id));
-  for (const id of overrides.keys()) if (!activeIds.has(id)) overrides.delete(id);
-  $('tab-count').textContent = tabs.length;
-  $('group-count').textContent = groups.length;
+function renderSources() {
+  const filter = $('source-filter');
+  if (filter.options.length !== sources.length + 1 || sources.some((source, index) => filter.options[index + 1]?.value !== source.sourceId)) {
+    const selected = filter.value;
+    filter.replaceChildren(filter.options[0], ...sources.map((source) => {
+      const option = document.createElement('option');
+      option.value = source.sourceId;
+      option.textContent = `${source.browser} · ${source.sourceId.slice(0, 6)}`;
+      return option;
+    }));
+    filter.value = sources.some((source) => source.sourceId === selected) ? selected : '';
+  }
   $('sources').replaceChildren();
   for (const source of sources) {
     const item = document.createElement('div');
@@ -151,10 +151,30 @@ function render() {
     title.textContent = `${source.browser} · ${source.tabs.length} 个标签页`;
     const time = document.createElement('small');
     time.textContent = `已同步 ${new Date(source.receivedAt).toLocaleTimeString()} · ${source.sourceId.slice(0, 6)}`;
-    item.append(title, time);
+    const status = document.createElement('small');
+    status.className = 'source-state';
+    status.textContent = !source.sessionId ? '扩展需升级' : source.connected ? '已连接' : '等待重连 · 显示上次同步列表';
+    item.append(title, status, time);
     $('sources').append(item);
   }
   if (!sources.length) $('sources').textContent = '等待浏览器同步';
+}
+
+function render() {
+  const focusedId = document.activeElement?.dataset.tabId;
+  const focusedGroupId = document.activeElement?.dataset.groupId;
+  const scrollPosition = window.scrollY;
+  let focusTarget;
+  renderSources();
+  const allTabs = sources.flatMap((source) => source.tabs);
+  const tabs = sources.filter((source) => !$('source-filter').value || source.sourceId === $('source-filter').value).flatMap((source) => source.tabs);
+  const ignoredNamesByHost = Object.fromEntries(ignoreRules.flatMap((rule) => rule.domains.map((host) => [host, rule.ignoredNames])));
+  groups = analyzeTabs(tabs, { sortBy: $('sort-by').value, direction: $('direction').value, ignoredNamesByHost });
+  updateWebsiteChoices(allTabs);
+  const activeIds = new Set(allTabs.map((tab) => tab.id));
+  for (const id of overrides.keys()) if (!activeIds.has(id)) overrides.delete(id);
+  $('tab-count').textContent = tabs.length;
+  $('group-count').textContent = groups.length;
   $('groups').replaceChildren();
   groups.forEach((group, index) => {
     const card = $('group-template').content.firstElementChild.cloneNode(true);
@@ -215,6 +235,11 @@ function render() {
   focusTarget?.focus({ preventScroll: true });
 }
 
+$('source-filter').addEventListener('change', () => {
+  window.scrollTo(0, 0);
+  render();
+  notice('已切换浏览器来源，列表与关闭仅作用于当前来源；手动勾选已保留。');
+});
 for (const id of ['sort-by', 'direction']) $(id).addEventListener('change', () => {
   if (autoPreselect) overrides.clear();
   render();
@@ -332,7 +357,13 @@ $('close-tabs').addEventListener('click', async () => {
   } catch (error) { notice(`关闭未完成：${error.message} 请检查浏览器实际状态后再操作。`, true); }
   finally { closing = false; hasCloseResult = true; updateCount(); }
 });
-window.tabTidy.onSources((next) => { sources = next; render(); if (!closing && !hasCloseResult) notice('标签页已同步。手动勾选已保留。'); });
+window.tabTidy.onSources((next) => {
+  const changed = next.length !== sources.length || next.some((source, index) => source.sourceId !== sources[index]?.sourceId || source.revision !== sources[index]?.revision);
+  sources = next;
+  if (!changed) { renderSources(); return; }
+  render();
+  if (!closing && !hasCloseResult) notice('标签页已同步。手动勾选已保留。');
+});
 try {
   const state = await window.tabTidy.getState();
   ignoreRules = state.ignoreRules;

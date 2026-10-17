@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "TabTidy 本机同步",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "minimum_chrome_version": "120",
   "description": "同步 Chrome 或 Edge 的普通窗口标签页到本机 TabTidy，并执行在桌面端确认的关闭操作。",
-  "permissions": ["tabs", "storage"],
+  "permissions": ["tabs", "storage", "alarms"],
   "host_permissions": ["http://127.0.0.1/*"],
   "incognito": "not_allowed",
   "background": { "service_worker": "background.js" },

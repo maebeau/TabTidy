@@ -5,6 +5,14 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { startBridge } from '../desktop/bridge.js';
 
+async function waitFor(check) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (await check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail('扩展未达到预期连接状态');
+}
+
 test('扩展通过浏览器消息接口读取普通窗口并发送到本机，保留来源标识', async (t) => {
   const token = 'c'.repeat(32);
   const bridge = await startBridge({ token, port: 0 });
@@ -15,6 +23,7 @@ test('扩展通过浏览器消息接口读取普通窗口并发送到本机，�
   const event = { addListener: () => {} };
   const id = 'a'.repeat(32);
   const chrome = {
+    alarms: { get: async () => undefined, create: async () => {}, onAlarm: event },
     runtime: { id, onMessage: { addListener: (listener) => { onMessage = listener; } }, onStartup: event },
     storage: { local: { get: async () => ({ ...stored }), set: async (values) => Object.assign(stored, values) } },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
@@ -59,6 +68,7 @@ test('扩展核对会话、网址和标题后关闭，跳过跳转及隐身页�
   const ready = new Promise((resolve) => { connected = resolve; });
   const event = { addListener: () => {} };
   const chrome = {
+    alarms: { get: async () => undefined, create: async () => {}, onAlarm: event },
     runtime: { id: 'a'.repeat(32), onMessage: event, onStartup: event },
     storage: { local: { get: async () => ({ ...stored }), set: async (values) => Object.assign(stored, values) } },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
@@ -91,4 +101,86 @@ test('扩展核对会话、网址和标题后关闭，跳过跳转及隐身页�
   assert.equal(expired[0].status, 'skipped');
   await assert.rejects(vm.runInContext('closeTabs({ type: "close-tabs", sessionId: "old-session" })', context), /关闭指令无效/);
   assert.deepEqual(removed, [1], '无效指令不能触发额外关闭');
+});
+
+test('首次配对后通过浏览器闹钟自动重连，桌面与扩展后台重启后保留来源且不重放关闭', async (t) => {
+  const token = 'e'.repeat(32);
+  let bridge;
+  let onAlarm;
+  let alarm;
+  let alarmCreates = 0;
+  const stored = {};
+  const stops = [];
+  const removed = [];
+  const live = new Map([1, 2].map((id) => [id, { id, title: `示例书 第${id}章`, url: `https://example.com/${id}` }]));
+  const event = { addListener: () => {} };
+  const chrome = {
+    runtime: { id: 'a'.repeat(32), onMessage: event, onStartup: event },
+    storage: { local: { get: async () => ({ ...stored }), set: async (values) => Object.assign(stored, values) } },
+    alarms: {
+      get: async () => alarm,
+      create: async (name, options) => { alarm = { name, ...options }; alarmCreates++; },
+      onAlarm: { addListener: (listener) => { onAlarm = listener; } },
+    },
+    action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
+    tabs: {
+      query: async () => [...live.values()],
+      get: async (id) => { if (!live.has(id)) throw new Error('No tab'); return { ...live.get(id) }; },
+      remove: async (id) => { removed.push(id); live.delete(id); },
+      onCreated: event, onRemoved: event, onUpdated: event,
+    },
+  };
+  const script = await readFile(new URL('../browser-extension/background.js', import.meta.url), 'utf8');
+  const boot = () => {
+    const stop = new AbortController();
+    stops.push(stop);
+    const context = vm.createContext({ chrome, crypto: webcrypto, navigator: { userAgent: 'Chrome' }, AbortSignal, setTimeout, clearTimeout,
+      fetch: (url, options) => {
+        if (!bridge) throw new TypeError('Failed to fetch');
+        return fetch(`${bridge.url}${new URL(url).pathname}`, { ...options, signal: AbortSignal.any([options.signal, stop.signal]) });
+      },
+    });
+    vm.runInContext(script, context);
+    return { context, stop };
+  };
+  t.after(async () => { stops.forEach((stop) => stop.abort()); if (bridge) await bridge.close(); });
+  let worker = boot();
+  await vm.runInContext('pending', worker.context);
+  assert.equal(alarmCreates, 0, '未配对时不注册重连闹钟');
+  stored.connectionCode = token;
+  await assert.rejects(vm.runInContext('queueSync()', worker.context), /自动重连/);
+  assert.equal(alarm.periodInMinutes, 0.5);
+  const sourceId = stored.sourceId;
+  bridge = await startBridge({ token, port: 0 });
+  onAlarm({ name: alarm.name });
+  await waitFor(() => bridge.snapshot()[0]?.connected);
+  assert.equal(bridge.snapshot()[0].sourceId, sourceId);
+  assert.equal(bridge.snapshot()[0].tabs.length, 2);
+  assert.equal(stored.lastError, '');
+
+  const previous = bridge;
+  bridge = undefined;
+  await previous.close();
+  await waitFor(() => vm.runInContext('!polling', worker.context));
+  bridge = await startBridge({ token, port: 0 });
+  assert.deepEqual(bridge.snapshot(), []);
+  onAlarm({ name: alarm.name });
+  await waitFor(() => bridge.snapshot()[0]?.connected);
+  assert.equal(bridge.snapshot()[0].sourceId, sourceId, '桌面重启无需重新配对');
+  const previousSession = bridge.snapshot()[0].sessionId;
+  worker.stop.abort();
+  await waitFor(() => vm.runInContext('!polling', worker.context));
+  alarm = undefined;
+  worker = boot();
+  await waitFor(() => bridge.snapshot()[0]?.sessionId !== previousSession && bridge.snapshot()[0]?.connected);
+  assert.equal(bridge.snapshot().length, 1, '后台重启不新增重复来源');
+  assert.equal(bridge.snapshot()[0].sourceId, sourceId);
+  assert.equal(alarmCreates, 2, '后台启动发现闹钟丢失时重新创建');
+  const results = await bridge.closeTabs(bridge.snapshot()[0].tabs);
+  assert.deepEqual(results.map((result) => result.status), ['closed', 'closed']);
+  assert.deepEqual(removed, [1, 2]);
+  onAlarm({ name: alarm.name });
+  await vm.runInContext('pending', worker.context);
+  assert.deepEqual(removed, [1, 2], '恢复与重试不会重放已确认的关闭');
+  assert.equal(stored.connectionCode, token);
 });

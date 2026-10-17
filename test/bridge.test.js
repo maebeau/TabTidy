@@ -54,14 +54,17 @@ test('关闭只发给对应浏览器会话，结果需认证且匹配请求；�
   const source = { sourceId: 'chrome', sessionId: 'session-one', browser: 'Chrome',
     tabs: [{ id: 1, title: '书 第1章', url: 'https://example.com/1' }] };
   await post('/tabs', source);
+  assert.equal(bridge.snapshot()[0].connected, false);
   await post('/tabs', { ...source, sourceId: 'edge', sessionId: 'session-two', browser: 'Edge' });
   const selected = bridge.snapshot().flatMap((item) => item.tabs);
   assert.equal((await post('/commands', source, 'wrong')).status, 401);
   assert.equal((await post('/commands', { ...source, sessionId: 'old' })).status, 409);
   assert.equal((await post('/close', source)).status, 404, 'HTTP 不提供发起关闭的接口');
   const poll = await post('/commands', source);
+  assert.equal(bridge.snapshot()[0].connected, true);
   const closing = bridge.closeTabs(selected);
   const { command } = await poll.json();
+  assert.equal(bridge.snapshot()[0].connected, true, '执行关闭期间仍视为已连接');
   assert.equal(command.type, 'close-tabs');
   assert.equal(command.sessionId, source.sessionId);
   assert.deepEqual(command.tabs, source.tabs);
@@ -104,4 +107,29 @@ test('关闭超时报告结果未知，过期指令不会留待扩展稍后执�
   assert.equal(results[0].status, 'unknown');
   const { command } = await poll.json();
   assert.equal((await post('/results', { ...source, requestId: command.requestId, results: [{ id: 1, status: 'closed' }] })).status, 409);
+});
+
+test('连接状态随指令连接建立和断开更新，不冒充新标签页快照', async (t) => {
+  const updates = [];
+  const token = 'f'.repeat(32);
+  const bridge = await startBridge({ token, port: 0, onUpdate: (sources) => updates.push(sources) });
+  const stop = new AbortController();
+  t.after(async () => { stop.abort(); await bridge.close(); });
+  const source = { sourceId: 'profile', sessionId: 'session', browser: 'Chrome', tabs: [] };
+  const post = (path, data, signal) => fetch(`${bridge.url}${path}`, { method: 'POST', signal,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  await post('/tabs', source);
+  const revision = bridge.snapshot()[0].revision;
+  assert.equal(bridge.snapshot()[0].connected, false);
+  const poll = await post('/commands', source, stop.signal);
+  assert.equal(bridge.snapshot()[0].connected, true);
+  const body = poll.json();
+  stop.abort();
+  await assert.rejects(body);
+  for (let i = 0; bridge.snapshot()[0].connected && i < 100; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(bridge.snapshot()[0].connected, false);
+  assert.equal(bridge.snapshot()[0].revision, revision);
+  assert.equal(updates.at(-1)[0].connected, false);
+  await post('/tabs', source);
+  assert.ok(bridge.snapshot()[0].revision > revision, '只有标签页同步递增快照编号');
 });

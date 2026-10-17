@@ -34,6 +34,7 @@ async function waitFor(check) {
   }))`);
   await waitFor(() => js("Boolean(document.getElementById('connection-code').value)"));
   assert.equal(await js("document.getElementById('back-to-top').hidden"), true, '顶部默认隐藏回到顶部按钮');
+  assert.equal(await js("document.getElementById('source-filter').disabled"), true, '尚无来源时禁用来源选择');
   const token = await js('window.tabTidy.getState().then(state => state.token)');
   assert.equal(await js("document.getElementById('settings-dialog').open"), false, '设置默认关闭');
   assert.equal(await js("document.querySelector('main #ignore-settings')"), null, '主列表不再包含忽略规则表单');
@@ -231,6 +232,7 @@ async function waitFor(check) {
   assert.equal(await js("document.querySelector('.tab-title').textContent"), tabs[0].title);
   assert.deepEqual(await groupSelection(), [{ checked: false, indeterminate: true, selected: 1 }], '切换排序仍按原规则重新预选');
   const chromeReceiver = await receiveClose('chrome-test', async () => { throw new Error('未确认或未选中的 Chrome 标签页不应收到关闭指令'); });
+  await waitFor(() => js("document.querySelector('.source-state').textContent === '已连接'"));
   let confirm;
   dialog.showMessageBox = async (_window, options) => {
     assert.equal(options.defaultId, 0);
@@ -244,6 +246,7 @@ async function waitFor(check) {
   assert.equal(await js("document.getElementById('close-tabs').disabled"), true);
   assert.equal(await js("Array.from(document.querySelectorAll('.group-checkbox, .tab-row input')).every(input => input.disabled)"), true);
   assert.equal(await js("document.getElementById('auto-preselect').disabled"), true, '确认关闭期间禁用开关');
+  assert.equal(await js("document.getElementById('source-filter').disabled"), true, '确认关闭期间不能切换来源');
   confirm({ response: 0 });
   await waitFor(() => js("document.getElementById('notice').textContent.includes('已取消关闭')"));
   assert.equal(received.length, 0, '取消确认不能发送关闭指令');
@@ -261,11 +264,22 @@ async function waitFor(check) {
   ], '整组勾选不应影响另一组');
   assert.equal(await js("document.getElementById('selected-count').textContent"), '3');
   await js("document.querySelectorAll('.group-checkbox')[0].click(); document.querySelectorAll('.group-checkbox')[1].click()");
+  assert.deepEqual(await js("Array.from(document.getElementById('source-filter').options, option => option.value)"), ['', 'chrome-test', 'edge-test']);
+  await js("document.getElementById('source-filter').value='chrome-test'; document.getElementById('source-filter').dispatchEvent(new Event('change'))");
+  assert.equal(await js("document.querySelectorAll('.group').length"), 1);
+  assert.equal(await js("document.getElementById('tab-count').textContent"), '2');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '0');
+  await js("document.querySelector('.tab-row input').click(); document.getElementById('source-filter').value='edge-test'; document.getElementById('source-filter').dispatchEvent(new Event('change')); document.getElementById('source-filter').focus(); window.groupBeforeConnection=document.querySelector('.group')");
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '2', '切换来源保留该来源此前的手动勾选');
+  assert.equal(await js("Array.from(document.querySelectorAll('.tab-row input')).every(input => input.dataset.tabId.startsWith('edge-test:'))"), true);
   const edgeReceiver = await receiveClose('edge-test', async (command) => {
     assert.deepEqual(command.tabs.map((tab) => tab.id).sort(), [10, 11]);
     await post('edge-test', 'Edge', [{ ...edgeTabs[1], url: 'https://example.com/changed' }]);
     return [{ id: 10, status: 'closed' }, { id: 11, status: 'skipped', error: '页面已变化' }];
   });
+  await waitFor(() => js("document.querySelectorAll('.source-state')[1].textContent === '已连接'"));
+  assert.equal(await js('document.activeElement.id'), 'source-filter', '连接状态更新不打断来源选择');
+  assert.equal(await js("window.groupBeforeConnection === document.querySelector('.group')"), true, '仅连接状态变化时不重建标签页列表');
   dialog.showMessageBox = async (_window, options) => {
     assert.ok(options.message.includes('2 个'));
     assert.ok(options.detail.includes(edgeTabs[0].title));
@@ -276,13 +290,17 @@ async function waitFor(check) {
   await edgeReceiver.done;
   assert.equal(received.length, 1);
   assert.equal(received[0].sourceId, 'edge-test');
-  assert.equal(await js("document.getElementById('tab-count').textContent"), '3');
+  assert.equal(await js("document.getElementById('tab-count').textContent"), '1', '统计只计算当前 Edge 来源');
   assert.equal(await js("document.getElementById('close-tabs').disabled"), true);
   await post('chrome-test', 'Chrome', tabs);
   await waitFor(() => js("document.getElementById('notice').textContent.includes('页面已变化')"));
   assert.ok((await js("document.getElementById('notice').textContent")).includes('已关闭 1 个'), '后续同步不能覆盖关闭结果');
   chromeReceiver.stop.abort();
   await chromeReceiver.done;
+  await waitFor(() => js("document.querySelector('.source-state').textContent.includes('等待重连')"));
+  await js("document.getElementById('source-filter').value=''; document.getElementById('source-filter').dispatchEvent(new Event('change'))");
+  assert.equal(await js("document.getElementById('tab-count').textContent"), '3');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '1', '隐藏来源的手动选择保留，且未随 Edge 关闭');
   await post('edge-test', 'Edge', edgeTabs);
   await waitFor(() => js("document.querySelectorAll('.group').length === 2"));
   await js("document.getElementById('direction').dispatchEvent(new Event('change'))");
@@ -394,7 +412,7 @@ async function waitFor(check) {
   await writeFile('artifacts/auto-preselect-preview.png', (await window.webContents.capturePage()).toPNG());
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   clearTimeout(timeout);
-  console.log('桌面验证通过：回到顶部、键盘激活及减少动态效果、自动预选开关、手动覆盖、同步/排序/规则保存保留选择、开关记忆、设置分栏和规则卡片、键盘焦点、最小窗口、双浏览器、分组勾选、确认关闭、迁移及恶意文本处理。');
+  console.log('桌面验证通过：浏览器来源选择、连接状态更新与焦点保留、关闭来源隔离、回到顶部、键盘激活及减少动态效果、自动预选开关、手动覆盖、同步/排序/规则保存保留选择、开关记忆、设置分栏和规则卡片、键盘焦点、最小窗口、双浏览器、分组勾选、确认关闭、迁移及恶意文本处理。');
   await rm(temporary, { recursive: true, force: true });
   app.exit(0);
 })().catch((error) => { console.error(error); app.exit(1); });
