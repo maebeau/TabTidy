@@ -300,12 +300,14 @@ async function waitFor(check) {
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(() => js("!document.getElementById('settings-dialog').open"));
   assert.equal(await js('document.activeElement.id'), 'open-settings', 'Esc 应恢复入口焦点');
-  const contrastColors = await js("['.tab-url', '.tab-time', '.note', '.source small', '.muted'].map(selector => ({ selector, color: getComputedStyle(document.querySelector(selector)).color }))");
+  const contrastColors = await js("['.tab-url', '.tab-time', '.note', '.source small', '.muted', '.stats', '.group-size', '.sidebar-current', '.rule-card-label', '.rule-chips span'].map(selector => ({ selector, color: getComputedStyle(document.querySelector(selector)).color }))");
   const luminance = (rgb) => rgb.map((value) => value / 255).map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
     .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
   for (const { selector, color } of contrastColors) {
     const foreground = luminance(color.match(/\d+/g).slice(0, 3).map(Number));
-    for (const background of [[255, 255, 255], [242, 247, 236], [246, 247, 244]]) {
+    const backgrounds = selector === '.sidebar-current' ? [[220, 231, 247]]
+      : [[255, 255, 255], [237, 245, 255], [248, 249, 251], [233, 237, 244]];
+    for (const background of backgrounds) {
       assert.ok((luminance(background) + 0.05) / (foreground + 0.05) >= 4.5, `${selector} 文字对比度应至少为 4.5:1`);
     }
   }

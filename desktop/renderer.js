@@ -147,6 +147,7 @@ function renderSources() {
   for (const source of sources) {
     const item = document.createElement('div');
     item.className = 'source';
+    item.dataset.browser = source.browser;
     item.title = `${source.tabs.length} 个标签页 · 来源 ${source.sourceId} · 上次同步 ${new Date(source.receivedAt).toLocaleTimeString()}`;
     const heading = document.createElement('div');
     heading.className = 'source-heading';

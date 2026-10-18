@@ -78,7 +78,7 @@ async function start() {
     } finally { closingTabs = false; }
   });
   window = new BrowserWindow({ width: 1180, height: 800, minWidth: 980, minHeight: 640, title: 'TabTidy',
-    backgroundColor: '#f6f7f4', show: false, autoHideMenuBar: true,
+    backgroundColor: '#ffffff', show: false, autoHideMenuBar: true,
     webPreferences: { preload: join(directory, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
