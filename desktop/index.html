@@ -34,6 +34,7 @@
       <div><h1 id="page-title" tabindex="-1">相似标签页</h1><div class="stats" aria-label="标签页统计"><span><strong id="tab-count">0</strong> <span id="tab-count-label">标签页</span></span><span><strong id="group-count">0</strong> 组</span></div></div>
       <div class="header-actions"><button id="close-tabs" title="核对弹窗后关闭当前显示分组中的勾选项" disabled>关闭已选 <span id="selected-count">0</span></button><button id="open-settings" class="secondary icon-button" type="button" aria-label="设置" title="设置" aria-haspopup="dialog" aria-controls="settings-dialog" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l.6 2.3 1.6.9 2.3-.6 3 5.2-1.7 1.7v1.8l1.7 1.7-3 5.2-2.3-.6-1.6.9L15 24H9l-.6-2.3-1.6-.9-2.3.6-3-5.2 1.7-1.7v-1.8L1.5 11l3-5.2 2.3.6 1.6-.9L9 3Z" transform="translate(1 0) scale(.9)"/><circle cx="12" cy="12" r="3"/></svg></button></div>
     </header>
+    <section class="searchbar" aria-label="搜索和选择筛选"><label class="search-field"><span class="sr-only">搜索标题或网址</span><input id="tab-search" type="search" placeholder="搜索标题或网址" maxlength="2048" aria-describedby="view-filter-note" disabled></label><label class="selected-filter"><input id="only-selected" type="checkbox" disabled>只看已选</label></section>
     <section class="toolbar" aria-label="排序和筛选">
       <div class="sort-controls"><label class="sr-only" for="sort-by">组内排序</label><select id="sort-by"><option value="natural">自然排序</option><option value="time">打开时间</option></select><label class="sr-only" for="direction">排序方向</label><select id="direction"><option value="desc">降序</option><option value="asc">升序</option></select><button id="auto-preselect" class="secondary preselect-toggle" type="button" role="switch" aria-checked="true" aria-label="自动预选" aria-describedby="sort-note" title="按排序保留每组首项，预选其余项；切换排序会重新预选。" disabled><span class="switch-track" aria-hidden="true"></span><span>自动预选</span></button></div>
       <form id="group-filter" aria-label="按每组项数筛选" aria-describedby="group-filter-help">
@@ -42,7 +43,7 @@
       </form>
     </section>
     <span id="group-filter-help" class="sr-only">项数包含建议保留项；上限留空表示不限，点击筛选后生效。</span>
-    <div class="control-notes"><p id="group-filter-note" class="note" role="status"></p><p id="sort-note" class="sr-only">按排序保留每组首项，预选其余项；切换排序会重新预选。</p></div>
+    <div class="control-notes"><p id="group-filter-note" class="note" role="status"></p><p id="view-filter-note" class="note" role="status"></p><p id="sort-note" class="sr-only">按排序保留每组首项，预选其余项；切换排序会重新预选。</p></div>
     <div id="notice" role="status" aria-live="polite"></div>
     <section id="groups" aria-label="相似标签页分组"></section>
     <section id="empty" class="empty"><h2>等待浏览器连接</h2><p class="muted">首次配对后自动连接。</p><button id="show-setup" class="secondary">连接浏览器</button></section>
@@ -83,6 +84,6 @@
     <div id="settings-notice" role="status" aria-live="polite"></div>
   </dialog>
   <template id="group-template"><article class="group"><div class="group-header"><label class="group-select"><input type="checkbox" class="group-checkbox"><strong class="group-title"></strong><span class="group-size"></span></label></div><div class="group-tabs"></div></article></template>
-  <template id="tab-template"><label class="tab-row"><input type="checkbox"><span class="tab-content"><span class="tab-title"></span><span class="tab-url"></span></span><span class="tab-meta"><span class="browser-label"></span><span class="tab-time"></span></span></label></template>
+  <template id="tab-template"><div class="tab-row"><label class="tab-choice"><input type="checkbox"><span class="tab-content"><span class="tab-title"></span><span class="tab-url"></span></span></label><span class="tab-meta"><span class="browser-label"></span><span class="tab-time"></span></span><button class="locate-tab secondary icon-button" type="button" title="定位原标签页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/></svg></button></div></template>
 </body>
 </html>

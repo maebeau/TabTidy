@@ -61,8 +61,15 @@ async function start() {
     const error = await shell.openPath(extensionPath);
     if (error) throw new Error(error);
   });
+  let focusingTab = false;
+  handle('focus-tab', async (tab) => {
+    if (closingTabs || focusingTab) throw new Error('正在执行浏览器操作，请稍候。');
+    focusingTab = true;
+    try { return await bridge.focusTab(tab); }
+    finally { focusingTab = false; }
+  });
   handle('close-tabs', async (tabs) => {
-    if (closingTabs) throw new Error('正在关闭标签页，请稍候。');
+    if (closingTabs || focusingTab) throw new Error('正在执行浏览器操作，请稍候。');
     if (!Array.isArray(tabs) || !tabs.length || tabs.length > 5000) throw new Error('关闭清单无效。');
     analyzeTabs(tabs);
     closingTabs = true;

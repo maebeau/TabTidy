@@ -97,9 +97,9 @@ test('扩展核对会话、网址和标题后关闭，跳过跳转及隐身页�
   assert.deepEqual(removed, [1]);
   assert.deepEqual(results.map((item) => item.status), ['closed', 'skipped', 'skipped', 'skipped', 'skipped', 'failed', 'skipped', 'failed']);
   assert.deepEqual(bridge.snapshot()[0].tabs.map((tab) => tab.id), ['chrome-test:2', 'chrome-test:3', 'chrome-test:4', 'chrome-test:6', 'chrome-test:8']);
-  const expired = await vm.runInContext('closeTabs({ type: "close-tabs", sessionId, requestId: crypto.randomUUID(), expiresAt: Date.now() - 1, tabs: [{ id: 2, title: "书 第2章", url: "https://example.com/new" }] })', context);
+  const expired = await vm.runInContext('executeCommand({ type: "close-tabs", sessionId, requestId: crypto.randomUUID(), expiresAt: Date.now() - 1, tabs: [{ id: 2, title: "书 第2章", url: "https://example.com/new" }] })', context);
   assert.equal(expired[0].status, 'skipped');
-  await assert.rejects(vm.runInContext('closeTabs({ type: "close-tabs", sessionId: "old-session" })', context), /关闭指令无效/);
+  await assert.rejects(vm.runInContext('executeCommand({ type: "close-tabs", sessionId: "old-session" })', context), /浏览器指令无效/);
   assert.deepEqual(removed, [1], '无效指令不能触发额外关闭');
 });
 
@@ -183,4 +183,62 @@ test('首次配对后通过浏览器闹钟自动重连，桌面与扩展后台�
   await vm.runInContext('pending', worker.context);
   assert.deepEqual(removed, [1, 2], '恢复与重试不会重放已确认的关闭');
   assert.equal(stored.connectionCode, token);
+});
+
+test('定位按浏览器来源激活原标签页及窗口，恢复最小化，拒绝变化、隐身、失效与过期目标', async (t) => {
+  const token = 'f'.repeat(32);
+  const bridge = await startBridge({ token, port: 0 });
+  const stops = [];
+  t.after(async () => { stops.forEach(stop => stop.abort()); await bridge.close(); });
+  const calls = [];
+  const workers = [];
+  for (const browser of ['Chrome', 'Edge']) {
+    const stop = new AbortController(); stops.push(stop);
+    const stored = { connectionCode: token, sourceId: browser.toLowerCase() };
+    const tab = { id: 1, windowId: browser === 'Chrome' ? 10 : 20, title: '同名书', url: 'https://example.com/book' };
+    let windowState = browser === 'Chrome' ? 'maximized' : 'minimized';
+    const event = { addListener: () => {} };
+    const chrome = {
+      runtime: { id: 'a'.repeat(32), onMessage: event, onStartup: event },
+      storage: { local: { get: async () => stored, set: async values => Object.assign(stored, values) } },
+      alarms: { get: async () => ({}), onAlarm: event },
+      action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
+      tabs: { query: async () => [{ ...tab }], get: async () => { if (tab.missing) throw new Error('No tab'); return { ...tab }; },
+        update: async (id, options) => { calls.push({ browser, tabId: id, ...options }); },
+        remove: async () => assert.fail('定位不能关闭标签页'), onCreated: event, onRemoved: event, onUpdated: event },
+      windows: { get: async () => ({ state: windowState }), update: async (windowId, options) => {
+        calls.push({ browser, windowId, ...options }); if (options.state) windowState = options.state;
+        if (tab.failFocus) throw new Error('Window focus refused');
+      } },
+    };
+    const context = vm.createContext({ chrome, crypto: webcrypto, navigator: { userAgent: browser === 'Edge' ? 'Edg/140' : 'Chrome' }, AbortSignal, setTimeout, clearTimeout,
+      fetch: (url, options) => fetch(`${bridge.url}${new URL(url).pathname}`, { ...options, signal: AbortSignal.any([options.signal, stop.signal]) }),
+    });
+    vm.runInContext(await readFile(new URL('../browser-extension/background.js', import.meta.url), 'utf8'), context);
+    workers.push({ context, tab });
+  }
+  await waitFor(() => bridge.snapshot().length === 2 && bridge.snapshot().every(source => source.connected));
+  for (const browser of ['Chrome', 'Edge']) {
+    const source = bridge.snapshot().find(source => source.browser === browser);
+    assert.equal(source.canFocus, true);
+    assert.equal((await bridge.focusTab(source.tabs[0])).status, 'focused');
+    await waitFor(() => bridge.snapshot().every(source => source.connected));
+  }
+  assert.deepEqual(calls, [
+    { browser: 'Chrome', tabId: 1, active: true }, { browser: 'Chrome', windowId: 10, focused: true },
+    { browser: 'Edge', windowId: 20, state: 'normal' }, { browser: 'Edge', tabId: 1, active: true }, { browser: 'Edge', windowId: 20, focused: true },
+  ]);
+  const { context, tab } = workers[0];
+  const run = (expires = 'Date.now()+30000') => vm.runInContext(`executeCommand({type:'focus-tab',sessionId,requestId:crypto.randomUUID(),expiresAt:${expires},tabs:[{id:1,title:'同名书',url:'https://example.com/book'}]})`, context);
+  const before = calls.length;
+  for (const change of [{ url: 'https://changed.example' }, { title: '变化' }, { incognito: true }, { pendingUrl: 'https://pending.example' }, { missing: true }]) {
+    const original = { ...tab }; Object.assign(tab, change);
+    assert.equal((await run())[0].status, 'skipped');
+    for (const key of Object.keys(tab)) delete tab[key]; Object.assign(tab, original);
+  }
+  assert.equal((await run('Date.now()-1'))[0].status, 'skipped');
+  assert.equal(calls.length, before);
+  await assert.rejects(vm.runInContext("executeCommand({type:'focus-tab',sessionId:'old'})", context), /指令无效/);
+  tab.failFocus = true;
+  assert.equal((await run())[0].status, 'failed');
 });

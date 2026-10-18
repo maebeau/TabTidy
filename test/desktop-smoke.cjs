@@ -47,10 +47,10 @@ async function waitFor(check) {
   assert.equal(await js("document.getElementById('rule-editor').hidden"), true, '默认展示卡片列表');
   assert.deepEqual(await js('window.tabTidy.getState().then(state => state.ignoreRules)'), [legacyRule]);
   assert.equal(await readFile(join(temporary, 'ignored-names.json'), 'utf8'), legacyFile, '自动迁移不能在读取时改写旧文件');
-  const post = async (sourceId, browser, tabs) => {
+  const post = async (sourceId, browser, tabs, canFocus = true) => {
     const response = await fetch('http://127.0.0.1:37843/tabs', { method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Origin: `chrome-extension://${'a'.repeat(32)}` },
-      body: JSON.stringify({ sourceId, sessionId: `${sourceId}-session`, browser, tabs }),
+      body: JSON.stringify({ sourceId, sessionId: `${sourceId}-session`, browser, canFocus, tabs }),
     });
     assert.equal(response.status, 200);
   };
@@ -134,6 +134,72 @@ async function waitFor(check) {
   await post('edge-test', 'Edge', largeGroup);
   await waitFor(() => js("document.getElementById('group-count').textContent === '3'"));
   assert.equal(await js("document.getElementById('tab-count').textContent"), '11', '默认沿用全部同步标签页统计');
+  const search = (query) => js(`document.getElementById('tab-search').value=${JSON.stringify(query)}; document.getElementById('tab-search').dispatchEvent(new Event('input'))`);
+  await search('深海');
+  assert.equal(await js("document.querySelectorAll('.tab-row').length"), 3, '按标题搜索');
+  assert.equal(await js("document.getElementById('tab-count').textContent"), '3');
+  assert.equal(await js("document.getElementById('selected-count').textContent"), '2', '隐藏项不计入关闭数量');
+  await search('EXAMPLE.COM/RANGE/300');
+  assert.equal(await js("document.querySelectorAll('.tab-row').length"), 1, '网址搜索不区分大小写，允许只显示组内一项');
+  assert.equal(await js("document.querySelector('.group-size').textContent"), '1 / 3 项');
+  await js("document.querySelector('.group-checkbox').click()");
+  await search('');
+  assert.equal(await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:300\"]').checked"), false);
+  assert.equal(await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:301\"]').checked"), true, '全选显示项不修改隐藏的组内项');
+  await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:300\"]').click()");
+  await search('EXAMPLE.COM/RANGE/300');
+  const searchReceiver = await receiveClose('chrome-test', async (command) => {
+    assert.equal(command.type, 'close-tabs');
+    assert.deepEqual(command.tabs.map(tab => tab.id), [300], '搜索后关闭只能包含显示的勾选项');
+    return [{ id: 300, status: 'skipped', error: '模拟保留搜索项' }];
+  });
+  const searchConfirm = dialog.showMessageBox;
+  dialog.showMessageBox = async (_window, options) => {
+    assert.ok(options.message.includes('1 个'));
+    assert.ok(!options.detail.includes('/range/301'), '确认清单不包含同组隐藏项');
+    return { response: 1 };
+  };
+  await js("document.getElementById('close-tabs').click()");
+  await searchReceiver.done;
+  await waitFor(() => js("document.getElementById('notice').textContent.includes('模拟保留搜索项') && !document.getElementById('tab-search').disabled"));
+  dialog.showMessageBox = searchConfirm;
+  received.length = 0;
+  await search('');
+  await js("document.getElementById('only-selected').click()");
+  assert.equal(await js("document.querySelectorAll('.tab-row').length"), 7);
+  await search('深海');
+  assert.equal(await js("document.querySelectorAll('.tab-row').length"), 2, '搜索和只看已选共同生效');
+  await writeFile('artifacts/search-preview.png', (await window.webContents.capturePage()).toPNG());
+  await search('');
+  await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:300\"]').focus(); document.activeElement.click()");
+  assert.equal(await js("document.querySelectorAll('.tab-row').length"), 6, '只看已选中取消勾选立即移除');
+  assert.equal(await js("document.activeElement.matches('.tab-row input')"), true, '消失项的焦点移到仍显示的项');
+  await js("document.getElementById('only-selected').click()");
+  assert.equal(await js("document.querySelectorAll('.tab-row').length"), 10);
+  await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:300\"]').click()");
+  await search('不存在的标题');
+  assert.equal(await js("document.querySelectorAll('.group').length"), 0);
+  assert.equal(await js("document.getElementById('close-tabs').disabled"), true);
+  await search('');
+  const selectedBeforeFocus = await js("document.getElementById('selected-count').textContent");
+  const focusReceiver = await receiveClose('edge-test', async (command) => {
+    assert.equal(command.type, 'focus-tab');
+    assert.equal(command.tabs.length, 1);
+    assert.equal(command.tabs[0].id, 500);
+    assert.equal(await js("document.getElementById('tab-search').disabled && document.getElementById('only-selected').disabled && document.getElementById('close-tabs').disabled"), true);
+    return [{ id: 500, status: 'focused' }];
+  });
+  await js("document.querySelector('.locate-tab[data-focus-tab-id=\"edge-test:500\"]').click()");
+  await focusReceiver.done;
+  await waitFor(() => js("document.getElementById('notice').textContent === '已定位原标签页。' && !document.getElementById('tab-search').disabled"));
+  assert.equal(await js("document.getElementById('selected-count').textContent"), selectedBeforeFocus, '定位按钮不改变勾选');
+  assert.equal(await js("document.activeElement.dataset.focusTabId"), 'edge-test:500');
+  received.length = 0;
+  await post('chrome-test', 'Chrome', chromeRangeTabs, false);
+  await js("document.querySelector('.locate-tab[data-focus-tab-id=\"chrome-test:300\"]').click()");
+  await waitFor(() => js("document.getElementById('notice').textContent.includes('扩展 0.4.0')"));
+  await post('chrome-test', 'Chrome', chromeRangeTabs);
+  await search('');
   await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:201\"]').click()");
   await applyRange(3);
   assert.equal(await js("document.getElementById('group-count').textContent"), '2');
@@ -511,7 +577,7 @@ async function waitFor(check) {
   await writeFile('artifacts/auto-preselect-preview.png', (await window.webContents.capturePage()).toPNG());
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   clearTimeout(timeout);
-  console.log('桌面验证通过：分组项数上下限、无效范围、筛选内统计、隐藏分组关闭隔离与选择保留、来源联合筛选、浏览器来源选择、连接状态更新与焦点保留、回到顶部、键盘激活及减少动态效果、自动预选开关、手动覆盖、同步/排序/规则保存保留选择、开关记忆、设置分栏和规则卡片、键盘焦点、最小窗口、双浏览器、分组勾选、确认关闭、迁移及恶意文本处理。');
+  console.log('桌面验证通过：原标签页定位与旧扩展提示、标题/网址搜索、只看已选与焦点移交、筛选内操作范围与隐藏项保留，以及排序、预选、来源、关闭、设置、最小窗口和既有回归。');
   await rm(temporary, { recursive: true, force: true });
   app.exit(0);
 })().catch((error) => { console.error(error); app.exit(1); });

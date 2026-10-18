@@ -133,3 +133,33 @@ test('连接状态随指令连接建立和断开更新，不冒充新标签页�
   await post('/tabs', source);
   assert.ok(bridge.snapshot()[0].revision > revision, '只有标签页同步递增快照编号');
 });
+
+test('定位核对能力、来源与会话，定位回执不能冒充关闭，离线不排队', async (t) => {
+  const token = 'a'.repeat(32);
+  const bridge = await startBridge({ token, port: 0 });
+  t.after(() => bridge.close());
+  const post = (path, data) => fetch(`${bridge.url}${path}`, { method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const source = { sourceId: 'chrome', sessionId: 'session', browser: 'Chrome',
+    tabs: [{ id: 1, title: '示例', url: 'https://example.com' }] };
+  await post('/tabs', source);
+  assert.match((await bridge.focusTab(bridge.snapshot()[0].tabs[0])).error, /扩展 0.4.0.*重新加载/);
+  assert.equal((await post('/tabs', { ...source, canFocus: 'yes' })).status, 400);
+  await post('/tabs', { ...source, canFocus: true });
+  const tab = bridge.snapshot()[0].tabs[0];
+  assert.match((await bridge.focusTab(tab)).error, /未连接/);
+  assert.match((await bridge.focusTab({ ...tab, sessionId: 'old' })).error, /会话已变化/);
+  assert.equal((await post('/focus', tab)).status, 404, 'HTTP 不提供发起定位的入口');
+  const poll = await post('/commands', source);
+  const focus = bridge.focusTab(tab);
+  const { command } = await poll.json();
+  assert.equal(command.type, 'focus-tab');
+  assert.deepEqual(command.tabs, source.tabs);
+  const reply = { ...source, requestId: command.requestId, results: [{ id: 1, status: 'focused' }] };
+  assert.equal((await post('/results', { ...reply, results: [{ id: 1, status: 'closed' }] })).status, 400);
+  assert.equal((await post('/results', { ...reply, sourceId: 'edge' })).status, 409);
+  assert.equal((await post('/results', reply)).status, 200);
+  assert.equal((await focus).status, 'focused');
+  assert.equal((await post('/results', reply)).status, 409);
+  assert.equal(bridge.snapshot()[0].tabs.length, 1, '定位不删除快照标签页');
+});

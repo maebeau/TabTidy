@@ -20,6 +20,7 @@ function readBody(request) {
 
 function validateSnapshot(data) {
   if (!data || typeof data.sourceId !== 'string' || !identifier.test(data.sourceId) || !['Chrome', 'Edge'].includes(data.browser)
+    || (data.canFocus != null && typeof data.canFocus !== 'boolean')
     || (data.sessionId != null && (typeof data.sessionId !== 'string' || !identifier.test(data.sessionId)))
     || !Array.isArray(data.tabs) || data.tabs.length > 5000) throw new TypeError('浏览器来源或标签页清单无效。');
   const ids = new Set();
@@ -33,7 +34,7 @@ function validateSnapshot(data) {
     return { id: `${data.sourceId}:${tab.id}`, title: tab.title, url: tab.url || '', openedAt: null,
       browser: data.browser, sourceId: data.sourceId, sessionId: data.sessionId || null };
   });
-  return { sourceId: data.sourceId, sessionId: data.sessionId || null, browser: data.browser, tabs, receivedAt: Date.now() };
+  return { sourceId: data.sourceId, sessionId: data.sessionId || null, browser: data.browser, canFocus: data.canFocus === true, tabs, receivedAt: Date.now() };
 }
 
 export async function startBridge({ token, port = 37843, onUpdate = () => {} }) {
@@ -46,7 +47,7 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
     connected: Boolean(source.sessionId && (polls.get(source.sourceId)?.sessionId === source.sessionId
       || [...commands.values()].some((command) => command.sourceId === source.sourceId && command.sessionId === source.sessionId))),
   })));
-  const closeTabs = async (tabs) => {
+  const runCommand = async (type, tabs) => {
     if (!Array.isArray(tabs) || !tabs.length || tabs.length > 5000
       || tabs.some((tab) => !tab || typeof tab.id !== 'string' || typeof tab.sourceId !== 'string'
         || typeof tab.title !== 'string' || typeof tab.url !== 'string')
@@ -58,8 +59,9 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
       const current = source?.tabs.find((item) => item.id === tab.id);
       let error;
       if (!source?.sessionId) error = '扩展版本过旧，无法关闭标签页。请展开左侧“扩展与连接”，用“打开扩展文件夹”中的新版文件替换原扩展目录，在浏览器扩展管理页点击“重新加载”，再同步。仅重新同步不会升级扩展。';
-      else if (source.sessionId !== tab.sessionId) error = '浏览器会话已变化，请重新同步后选择。';
-      else if (!current || current.url !== tab.url || current.title !== tab.title || !current.url) error = '标签页已关闭、页面已变化或网址未知。';
+      if (type === 'focus-tab' && !source?.canFocus) error = '定位需要扩展 0.4.0 或更新版本。请展开“扩展与连接”，打开扩展文件夹，替换原目录文件，在浏览器扩展管理页重新加载后再同步。';
+      if (!error && source.sessionId !== tab.sessionId) error = '浏览器会话已变化，请重新同步后选择。';
+      if (!error && (!current || current.url !== tab.url || current.title !== tab.title || !current.url)) error = '标签页已关闭、页面已变化或网址未知。';
       if (error) { results.set(tab.id, { id: tab.id, status: 'skipped', error }); continue; }
       if (!bySource.has(tab.sourceId)) bySource.set(tab.sourceId, []);
       bySource.get(tab.sourceId).push(current);
@@ -79,8 +81,8 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
           resolve();
         };
         const timer = setTimeout(() => complete(), 30000);
-        commands.set(requestId, { sourceId, sessionId: poll.sessionId, selected, complete });
-        poll.finish({ type: 'close-tabs', requestId, sessionId: poll.sessionId, expiresAt: Date.now() + 30000,
+        commands.set(requestId, { type, sourceId, sessionId: poll.sessionId, selected, complete });
+        poll.finish({ type, requestId, sessionId: poll.sessionId, expiresAt: Date.now() + 30000,
           tabs: selected.map((tab) => ({ id: Number(tab.id.slice(sourceId.length + 1)), title: tab.title, url: tab.url })) });
       });
     }));
@@ -133,11 +135,11 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
         return;
       }
       const command = commands.get(data.requestId);
-      if (!command || command.sourceId !== data.sourceId || command.sessionId !== data.sessionId) return send(409, { error: '关闭请求已过期或来源不匹配。' });
+      if (!command || command.sourceId !== data.sourceId || command.sessionId !== data.sessionId) return send(409, { error: '浏览器请求已过期或来源不匹配。' });
       const expectedIds = new Set(command.selected.map((tab) => Number(tab.id.slice(data.sourceId.length + 1))));
       if (!Array.isArray(data.results) || data.results.length !== expectedIds.size || data.results.some((item) =>
-        !item || !expectedIds.delete(item.id) || !['closed', 'skipped', 'failed'].includes(item.status)
-        || (item.error != null && (typeof item.error !== 'string' || item.error.length > 512)))) throw new TypeError('关闭结果无效。');
+        !item || !expectedIds.delete(item.id) || ![command.type === 'focus-tab' ? 'focused' : 'closed', 'skipped', 'failed'].includes(item.status)
+        || (item.error != null && (typeof item.error !== 'string' || item.error.length > 512)))) throw new TypeError('浏览器结果无效。');
       command.complete(data.results.map((item) => ({ ...item, id: `${data.sourceId}:${item.id}` })));
       send(200, { ok: true });
     } catch (error) {
@@ -150,7 +152,9 @@ export async function startBridge({ token, port = 37843, onUpdate = () => {} }) 
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
-  return { url: `http://127.0.0.1:${server.address().port}`, snapshot, closeTabs,
+  return { url: `http://127.0.0.1:${server.address().port}`, snapshot,
+    closeTabs: (tabs) => runCommand('close-tabs', tabs),
+    focusTab: async (tab) => (await runCommand('focus-tab', [tab]))[0],
     close: () => {
       for (const poll of polls.values()) poll.finish(null);
       for (const command of commands.values()) command.complete();

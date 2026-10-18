@@ -6,6 +6,7 @@ let sources = [];
 let groups = [];
 const overrides = new Map();
 let closing = false;
+let locating = false;
 let ignoreRules = [];
 let savingRules = false;
 let initialized = false;
@@ -31,9 +32,9 @@ function notice(text, error = false, id = 'notice') {
 function updateCount() {
   const count = groups.flatMap((group) => group.tabs).filter((tab) => tab.selected).length;
   $('selected-count').textContent = count;
-  const busy = !initialized || closing || savingRules;
+  const busy = !initialized || closing || savingRules || locating;
   $('close-tabs').disabled = busy || count === 0;
-  for (const input of document.querySelectorAll('.tab-row input, .group-checkbox, #sort-by, #direction, #auto-preselect, #group-filter input, #group-filter button, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
+  for (const input of document.querySelectorAll('.tab-row input, .locate-tab, #tab-search, #only-selected, .group-checkbox, #sort-by, #direction, #auto-preselect, #group-filter input, #group-filter button, #open-settings, #ignore-nav, #add-rule, .rule-card button, #ignore-form input, #ignore-form textarea, #ignore-form button, #ignore-form select')) input.disabled = busy;
   $('source-filter').disabled = busy || sources.length === 0;
 }
 
@@ -168,7 +169,9 @@ function renderSources() {
 
 function render() {
   const focusedId = document.activeElement?.dataset.tabId;
+  const focusedLocateId = document.activeElement?.dataset.focusTabId;
   const focusedGroupId = document.activeElement?.dataset.groupId;
+  const focusedRowIndex = [...document.querySelectorAll('.tab-row input')].indexOf(document.activeElement);
   const scrollPosition = window.scrollY;
   let focusTarget;
   renderSources();
@@ -176,9 +179,16 @@ function render() {
   const tabs = sources.filter((source) => !$('source-filter').value || source.sourceId === $('source-filter').value).flatMap((source) => source.tabs);
   const mixedSources = new Set(tabs.map((tab) => tab.sourceId)).size > 1;
   const ignoredNamesByHost = Object.fromEntries(ignoreRules.flatMap((rule) => rule.domains.map((host) => [host, rule.ignoredNames])));
+  const query = $('tab-search').value.trim().normalize('NFKC').toLocaleLowerCase();
+  const selectedOnly = $('only-selected').checked;
   groups = analyzeTabs(tabs, { sortBy: $('sort-by').value, direction: $('direction').value, ignoredNamesByHost })
-    .filter((group) => group.tabs.length >= groupRange.min && group.tabs.length <= groupRange.max);
-  const filtering = groupRange.min > 2 || groupRange.max !== Infinity;
+    .filter((group) => group.tabs.length >= groupRange.min && group.tabs.length <= groupRange.max)
+    .map((group) => ({ ...group, total: group.tabs.length, title: group.tabs[0].title, tabs: group.tabs.map((tab) => ({ ...tab,
+      selected: overrides.has(tab.id) ? overrides.get(tab.id) : autoPreselect && tab.selected,
+    })).filter((tab) => (!selectedOnly || tab.selected) && (!query || `${tab.title}\n${tab.url}`.normalize('NFKC').toLocaleLowerCase().includes(query))) }))
+    .filter((group) => group.tabs.length > 0);
+  const rangeFiltering = groupRange.min > 2 || groupRange.max !== Infinity;
+  const filtering = rangeFiltering || Boolean(query) || selectedOnly;
   updateWebsiteChoices(allTabs);
   const activeIds = new Set(allTabs.map((tab) => tab.id));
   for (const id of overrides.keys()) if (!activeIds.has(id)) overrides.delete(id);
@@ -188,13 +198,13 @@ function render() {
   $('groups').replaceChildren();
   groups.forEach((group, index) => {
     const card = $('group-template').content.firstElementChild.cloneNode(true);
-    card.querySelector('.group-title').textContent = group.tabs[0].title || '无标题';
-    card.querySelector('.group-title').title = group.tabs[0].title || '无标题';
-    card.querySelector('.group-size').textContent = `${group.tabs.length} 项`;
+    card.querySelector('.group-title').textContent = group.title || '无标题';
+    card.querySelector('.group-title').title = group.title || '无标题';
+    card.querySelector('.group-size').textContent = group.total === group.tabs.length ? `${group.total} 项` : `${group.tabs.length} / ${group.total} 项`;
     card.querySelector('.group-header').title = group.reasons.map((reason) => reason === 'duplicate-url' ? '网址重复' : '标题相似').join(' · ');
     const groupCheckbox = card.querySelector('.group-checkbox');
     groupCheckbox.dataset.groupId = group.tabs[0].id;
-    groupCheckbox.setAttribute('aria-label', `全选本组：第 ${index + 1} 组，${group.tabs[0].title || '无标题'}`);
+    groupCheckbox.setAttribute('aria-label', `${group.total === group.tabs.length ? '全选本组' : '全选显示项'}：第 ${index + 1} 组，${group.title || '无标题'}`);
     if (group.tabs.some((tab) => tab.id === focusedGroupId)) focusTarget = groupCheckbox;
     const updateGroupSelection = () => {
       const selected = group.tabs.filter((tab) => tab.selected).length;
@@ -207,9 +217,9 @@ function render() {
       for (const checkbox of card.querySelectorAll('.tab-row input')) checkbox.checked = selected;
       updateGroupSelection();
       updateCount();
+      if (selectedOnly) render();
     });
     for (const tab of group.tabs) {
-      tab.selected = overrides.has(tab.id) ? overrides.get(tab.id) : autoPreselect && tab.selected;
       const row = $('tab-template').content.firstElementChild.cloneNode(true);
       const checkbox = row.querySelector('input');
       checkbox.dataset.tabId = tab.id;
@@ -219,6 +229,7 @@ function render() {
       checkbox.addEventListener('change', () => {
         tab.selected = checkbox.checked; overrides.set(tab.id, tab.selected);
         updateGroupSelection(); updateCount();
+        if (selectedOnly) render();
       });
       row.querySelector('.tab-title').textContent = tab.title || '无标题';
       row.querySelector('.tab-url').textContent = tab.url || '暂无网址';
@@ -227,17 +238,34 @@ function render() {
       row.querySelector('.tab-time').textContent = tab.openedAt == null ? '' : new Date(tab.openedAt).toLocaleString();
       row.querySelector('.tab-time').hidden = tab.openedAt == null;
       row.querySelector('.tab-meta').hidden = !mixedSources && tab.openedAt == null;
+      const locate = row.querySelector('.locate-tab');
+      locate.dataset.focusTabId = tab.id;
+      locate.setAttribute('aria-label', `定位 ${tab.title || '无标题'}`);
+      if (tab.id === focusedLocateId) focusTarget = locate;
+      locate.addEventListener('click', async () => {
+        if (closing || locating || savingRules) return;
+        locating = true; updateCount(); notice('正在定位标签页…');
+        try {
+          const result = await window.tabTidy.focusTab(tab);
+          notice(result.status === 'focused' ? '已定位原标签页。' : `定位未完成：${result.error || '请检查浏览器实际状态。'}`, result.status !== 'focused');
+        } catch (error) { notice(`定位未完成：${error.message}`, true); }
+        finally {
+          locating = false; updateCount();
+          [...document.querySelectorAll('.locate-tab')].find((button) => button.dataset.focusTabId === tab.id)?.focus({ preventScroll: true });
+        }
+      });
       card.querySelector('.group-tabs').append(row);
     }
     updateGroupSelection();
     $('groups').append(card);
   });
   $('empty').hidden = groups.length > 0;
-  $('empty').querySelector('h2').textContent = !sources.length ? '等待浏览器连接' : filtering ? '没有符合项数条件的分组' : '暂无相似分组';
-  $('empty').querySelector('p').textContent = !sources.length ? '首次配对后自动连接。' : filtering ? '调整数量范围，或重置筛选。' : '新标签页会自动更新到这里。';
+  $('empty').querySelector('h2').textContent = !sources.length ? '等待浏览器连接' : query || selectedOnly ? '没有符合条件的标签页' : rangeFiltering ? '没有符合项数条件的分组' : '暂无相似分组';
+  $('empty').querySelector('p').textContent = !sources.length ? '首次配对后自动连接。' : query || selectedOnly ? '清除搜索、关闭只看已选，或调整每组项数。' : rangeFiltering ? '调整数量范围，或重置筛选。' : '新标签页会自动更新到这里。';
   $('show-setup').hidden = filtering && sources.length > 0;
   $('show-setup').textContent = sources.length ? '连接其他浏览器' : '连接浏览器';
-  $('group-filter-note').textContent = !filtering ? '' : groupRange.max === Infinity ? `每组至少 ${groupRange.min} 项` : `每组 ${groupRange.min}–${groupRange.max} 项`;
+  $('group-filter-note').textContent = !rangeFiltering ? '' : groupRange.max === Infinity ? `每组至少 ${groupRange.min} 项` : `每组 ${groupRange.min}–${groupRange.max} 项`;
+  $('view-filter-note').textContent = query || selectedOnly ? '仅显示匹配项；关闭和整组勾选只作用于当前显示项。' : '';
   $('auto-preselect').setAttribute('aria-checked', String(autoPreselect));
   $('sort-note').className = $('sort-by').value === 'time' ? 'note' : 'sr-only';
   $('sort-note').textContent = $('sort-by').value === 'time' ? '打开时间未知，分组不自动预选。'
@@ -245,8 +273,13 @@ function render() {
   updateCount();
   window.scrollTo(0, scrollPosition);
   updateBackToTop();
+  if (!focusTarget && (focusedId || focusedGroupId || focusedLocateId)) focusTarget = document.querySelectorAll('.tab-row input')[Math.max(0, focusedRowIndex)] || document.querySelector('.tab-row input') || $('only-selected');
   focusTarget?.focus({ preventScroll: true });
 }
+
+$('tab-search').addEventListener('input', (event) => { if (!event.isComposing) render(); });
+$('tab-search').addEventListener('compositionend', () => render());
+$('only-selected').addEventListener('change', () => render());
 
 $('group-filter').addEventListener('submit', (event) => {
   event.preventDefault();
