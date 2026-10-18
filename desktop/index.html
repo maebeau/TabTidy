@@ -15,6 +15,7 @@
     <label class="source-filter-label" for="source-filter">浏览器</label>
     <select id="source-filter" disabled><option value="">全部浏览器</option></select>
     <div id="sources"><p class="muted">等待浏览器同步</p></div>
+    <section id="extension-update" role="status" hidden><strong>扩展更新提醒</strong><p id="extension-update-text"></p><button id="update-extension" class="secondary" type="button">打开扩展文件夹</button></section>
     <details id="setup" open>
       <summary>扩展与连接</summary>
       <button id="open-extension" class="secondary">打开扩展文件夹</button>
@@ -50,7 +51,7 @@
   </main>
   <button id="back-to-top" class="icon-button" type="button" aria-label="回到顶部" title="回到顶部" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-7 7 7-7 7 7"/></svg></button>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
-    <div class="settings-header"><h2 id="settings-title">设置</h2><button id="close-settings" class="secondary" type="button" autofocus>返回</button></div>
+    <div class="settings-header"><div><h2 id="settings-title">设置</h2><p id="app-version"></p></div><button id="close-settings" class="secondary" type="button" autofocus>返回</button></div>
     <div class="settings-layout">
       <nav class="settings-nav" aria-label="设置项">
         <button id="ignore-nav" type="button" aria-current="page" aria-controls="ignore-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>忽略规则</button>

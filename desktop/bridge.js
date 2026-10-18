@@ -23,6 +23,9 @@ function validateSnapshot(data) {
     || (data.canFocus != null && typeof data.canFocus !== 'boolean')
     || (data.sessionId != null && (typeof data.sessionId !== 'string' || !identifier.test(data.sessionId)))
     || !Array.isArray(data.tabs) || data.tabs.length > 5000) throw new TypeError('浏览器来源或标签页清单无效。');
+  if (data.extensionVersion != null && (typeof data.extensionVersion !== 'string'
+    || !/^\d{1,5}(?:\.\d{1,5}){0,3}$/.test(data.extensionVersion)
+    || data.extensionVersion.split('.').some((part) => Number(part) > 65535))) throw new TypeError('扩展版本号无效。');
   const ids = new Set();
   const tabs = data.tabs.map((tab) => {
     if (!tab || !Number.isSafeInteger(tab.id) || tab.id < 0 || ids.has(tab.id)
@@ -34,7 +37,8 @@ function validateSnapshot(data) {
     return { id: `${data.sourceId}:${tab.id}`, title: tab.title, url: tab.url || '', openedAt: null,
       browser: data.browser, sourceId: data.sourceId, sessionId: data.sessionId || null };
   });
-  return { sourceId: data.sourceId, sessionId: data.sessionId || null, browser: data.browser, canFocus: data.canFocus === true, tabs, receivedAt: Date.now() };
+  return { sourceId: data.sourceId, sessionId: data.sessionId || null, browser: data.browser, canFocus: data.canFocus === true,
+    extensionVersion: data.extensionVersion ?? null, tabs, receivedAt: Date.now() };
 }
 
 export async function startBridge({ token, port = 37843, onUpdate = () => {} }) {

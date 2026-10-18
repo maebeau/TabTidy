@@ -3,6 +3,7 @@ import { normalizeWebsite } from './title-rules.js';
 
 const $ = (id) => document.getElementById(id);
 let sources = [];
+let versions = { desktop: '', extension: '' };
 let groups = [];
 const overrides = new Map();
 let closing = false;
@@ -132,6 +133,17 @@ function sourceLabel(source) {
   return sources.filter((item) => item.browser === source.browser).length > 1 ? `${source.browser} · ${source.sourceId.slice(0, 6)}` : source.browser;
 }
 
+function extensionVersionState(source) {
+  if (!source.extensionVersion || !versions.extension) return 'unknown';
+  const installed = source.extensionVersion.split('.').map(Number);
+  const bundled = versions.extension.split('.').map(Number);
+  for (let index = 0; index < 4; index++) {
+    const difference = (installed[index] || 0) - (bundled[index] || 0);
+    if (difference) return difference < 0 ? 'outdated' : 'newer';
+  }
+  return 'current';
+}
+
 function renderSources() {
   const filter = $('source-filter');
   if (filter.options.length !== sources.length + 1 || sources.some((source, index) => filter.options[index + 1]?.value !== source.sourceId || filter.options[index + 1]?.textContent !== sourceLabel(source))) {
@@ -145,6 +157,7 @@ function renderSources() {
     filter.value = sources.some((source) => source.sourceId === selected) ? selected : '';
   }
   $('sources').replaceChildren();
+  const needsUpdate = [];
   for (const source of sources) {
     const item = document.createElement('div');
     item.className = 'source';
@@ -161,10 +174,22 @@ function renderSources() {
     status.className = 'source-state';
     status.textContent = !source.sessionId ? '扩展需升级' : source.connected ? '已连接' : '等待重连 · 旧列表';
     status.dataset.connected = String(source.connected);
-    item.append(heading, status);
+    const version = document.createElement('small');
+    version.className = 'source-version';
+    const level = extensionVersionState(source);
+    version.dataset.level = level;
+    version.textContent = source.extensionVersion ? `扩展 v${source.extensionVersion}${level === 'outdated' ? ' · 建议升级' : level === 'newer' ? ' · 高于随包' : ''}` : '扩展版本未知';
+    version.title = '上次同步时上报的扩展版本，与当前应用随包扩展比较。';
+    if (level === 'unknown' || level === 'outdated') needsUpdate.push(sourceLabel(source));
+    item.append(heading, status, version);
     $('sources').append(item);
   }
   if (!sources.length) $('sources').textContent = '等待浏览器同步';
+  const hideUpdate = !versions.extension || needsUpdate.length === 0;
+  if (hideUpdate && $('extension-update').contains(document.activeElement)) $('setup').querySelector('summary').focus({ preventScroll: true });
+  $('extension-update').hidden = hideUpdate;
+  const message = `${needsUpdate.join('、')} 的扩展版本较旧或未上报。随包版本为 ${versions.extension}：替换原扩展目录中的文件，在浏览器扩展管理页重新加载并同步。仅重新同步不会升级扩展。`;
+  if ($('extension-update-text').textContent !== message) $('extension-update-text').textContent = message;
 }
 
 function render() {
@@ -400,7 +425,7 @@ $('ignore-form').addEventListener('submit', (event) => {
 $('copy-code').addEventListener('click', async () => {
   try { await window.tabTidy.copyCode(); notice('连接码已复制。'); } catch (error) { notice(error.message, true); }
 });
-$('open-extension').addEventListener('click', async () => {
+for (const id of ['open-extension', 'update-extension']) $(id).addEventListener('click', async () => {
   try { await window.tabTidy.openExtensionFolder(); } catch (error) { notice(error.message, true); }
 });
 $('show-setup').addEventListener('click', () => { $('setup').open = true; $('open-extension').focus(); });
@@ -434,6 +459,8 @@ window.tabTidy.onSources((next) => {
 });
 try {
   const state = await window.tabTidy.getState();
+  versions = state.versions;
+  $('app-version').textContent = `桌面 v${versions.desktop} · 随包扩展 v${versions.extension}`;
   ignoreRules = state.ignoreRules;
   try { autoPreselect = localStorage.getItem('auto-preselect') !== 'false'; }
   catch { autoPreselect = false; notice('无法读取自动预选偏好，本次已关闭自动预选；仍可手动勾选或开启。', true); }

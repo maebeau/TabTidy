@@ -44,11 +44,15 @@ async function start() {
   });
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   const extensionPath = app.isPackaged ? join(process.resourcesPath, 'browser-extension') : join(directory, '../browser-extension');
+  const versions = {
+    desktop: JSON.parse(await readFile(join(directory, '../package.json'), 'utf8')).version,
+    extension: JSON.parse(await readFile(join(extensionPath, 'manifest.json'), 'utf8')).version,
+  };
   const handle = (channel, callback) => ipcMain.handle(channel, (event, ...args) => {
     if (event.sender !== window?.webContents || event.senderFrame?.url !== pageURL) throw new Error('请求来源无效。');
     return callback(...args);
   });
-  handle('get-state', () => ({ token, sources: bridge.snapshot(), ignoreRules }));
+  handle('get-state', () => ({ token, sources: bridge.snapshot(), ignoreRules, versions }));
   handle('save-ignored-names', async (rules) => {
     if (closingTabs) return { ok: false, error: '正在关闭标签页，请稍后再保存设置。' };
     try {

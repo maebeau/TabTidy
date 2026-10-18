@@ -194,6 +194,30 @@ aside {
   margin-top:5px;
   font-size:11px
 }
+.source .source-version {
+  padding-left:26px;
+  overflow-wrap:anywhere
+}
+.source-version[data-level="outdated"],.source-version[data-level="unknown"] {
+  color:#92511d
+}
+#extension-update {
+  padding:12px;
+  margin:0 0 20px;
+  border:1px solid #e1d3ba;
+  border-radius:9px;
+  background:#fff8eb;
+  color:#805018;
+  font-size:11px;
+  line-height:1.7;
+  overflow-wrap:anywhere
+}
+#extension-update p {
+  margin:6px 0 10px
+}
+#extension-update button {
+  font-size:11px
+}
 details {
   border-top:1px solid #dcdfe6;
   padding:17px 5px 0
@@ -538,6 +562,12 @@ select {
   margin:0;
   font-size:19px;
   letter-spacing:-.3px
+}
+#app-version {
+  font-size:11px;
+  color:var(--muted);
+  margin:6px 0 0;
+  line-height:1.6
 }
 .settings-layout {
   display:grid;

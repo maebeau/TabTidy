@@ -163,3 +163,25 @@ test('定位核对能力、来源与会话，定位回执不能冒充关闭，�
   assert.equal((await post('/results', reply)).status, 409);
   assert.equal(bridge.snapshot()[0].tabs.length, 1, '定位不删除快照标签页');
 });
+
+test('扩展版本按来源保留，旧扩展记为未知，恶意或无效版本不能污染快照', async (t) => {
+  const token = 'b'.repeat(32);
+  const bridge = await startBridge({ token, port: 0 });
+  t.after(() => bridge.close());
+  const source = { sourceId: 'chrome', browser: 'Chrome', tabs: [] };
+  const post = data => fetch(`${bridge.url}/tabs`, { method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  assert.equal((await post(source)).status, 200);
+  assert.equal(bridge.snapshot()[0].extensionVersion, null);
+  assert.equal((await post({ ...source, extensionVersion: '0.5.0' })).status, 200);
+  assert.equal((await post({ ...source, sourceId: 'edge', browser: 'Edge', extensionVersion: '0.4.0' })).status, 200);
+  assert.deepEqual(bridge.snapshot().map(item => item.extensionVersion), ['0.5.0', '0.4.0']);
+  for (const extensionVersion of [123, {}, [], '', '0.5.0<script>', '0.5.0-beta', '65536.0', '1.2.3.4.5', '1'.repeat(1000)]) {
+    assert.equal((await post({ ...source, extensionVersion })).status, 400);
+    assert.equal(bridge.snapshot()[0].extensionVersion, '0.5.0');
+  }
+  for (const extensionVersion of ['1', '0.5', '0.5.0.1', '65535.65535.65535.65535']) {
+    assert.equal((await post({ ...source, extensionVersion })).status, 200);
+    assert.equal(bridge.snapshot()[0].extensionVersion, extensionVersion);
+  }
+});

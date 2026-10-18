@@ -93,7 +93,8 @@ async function syncTabs() {
   const browser = /Edg\//.test(navigator.userAgent) ? 'Edge' : 'Chrome';
   const tabs = (await chrome.tabs.query({})).filter((tab) => !tab.incognito && Number.isSafeInteger(tab.id))
     .map((tab) => ({ id: tab.id, title: tab.title || '', url: tab.url || tab.pendingUrl || '' }));
-  const result = await request('/tabs', { sourceId, sessionId, browser, canFocus: true, tabs }, settings.connectionCode);
+  const result = await request('/tabs', { sourceId, sessionId, browser, canFocus: true,
+    extensionVersion: chrome.runtime.getManifest().version, tabs }, settings.connectionCode);
   await chrome.storage.local.set({ lastCount: result.count, lastSync: Date.now(), lastError: '' });
   await chrome.action.setBadgeText({ text: '' });
   void pollCommands();

@@ -1,9 +1,11 @@
 const assert = require('node:assert/strict');
-const { app, BrowserWindow, dialog } = require('electron');
-const { mkdtempSync, writeFileSync } = require('node:fs');
+const { app, BrowserWindow, dialog, shell } = require('electron');
+const { mkdtempSync, writeFileSync, readFileSync } = require('node:fs');
 const { mkdir, readFile, rm, writeFile } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
+const releaseVersions = { desktop: JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')).version,
+  extension: JSON.parse(readFileSync(join(__dirname, '../browser-extension/manifest.json'), 'utf8')).version };
 
 const temporary = mkdtempSync(join(tmpdir(), 'tabtidy-desktop-'));
 app.setPath('userData', temporary);
@@ -36,6 +38,9 @@ async function waitFor(check) {
   assert.equal(await js("document.getElementById('back-to-top').hidden"), true, '顶部默认隐藏回到顶部按钮');
   assert.equal(await js("document.getElementById('source-filter').disabled"), true, '尚无来源时禁用来源选择');
   const token = await js('window.tabTidy.getState().then(state => state.token)');
+  assert.deepEqual(await js('window.tabTidy.getState().then(state => state.versions)'), releaseVersions);
+  assert.equal(await js("document.getElementById('app-version').textContent"), `桌面 v${releaseVersions.desktop} · 随包扩展 v${releaseVersions.extension}`);
+  assert.equal(await js("document.getElementById('extension-update').hidden"), true, '无来源时不提示升级');
   assert.equal(await js("document.getElementById('settings-dialog').open"), false, '设置默认关闭');
   assert.equal(await js("document.querySelector('main #ignore-settings')"), null, '主列表不再包含忽略规则表单');
   assert.equal(await js("document.getElementById('ignore-form').closest('dialog').id"), 'settings-dialog');
@@ -47,10 +52,10 @@ async function waitFor(check) {
   assert.equal(await js("document.getElementById('rule-editor').hidden"), true, '默认展示卡片列表');
   assert.deepEqual(await js('window.tabTidy.getState().then(state => state.ignoreRules)'), [legacyRule]);
   assert.equal(await readFile(join(temporary, 'ignored-names.json'), 'utf8'), legacyFile, '自动迁移不能在读取时改写旧文件');
-  const post = async (sourceId, browser, tabs, canFocus = true) => {
+  const post = async (sourceId, browser, tabs, canFocus = true, extensionVersion = releaseVersions.extension) => {
     const response = await fetch('http://127.0.0.1:37843/tabs', { method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Origin: `chrome-extension://${'a'.repeat(32)}` },
-      body: JSON.stringify({ sourceId, sessionId: `${sourceId}-session`, browser, canFocus, tabs }),
+      body: JSON.stringify({ sourceId, sessionId: `${sourceId}-session`, browser, canFocus, extensionVersion, tabs }),
     });
     assert.equal(response.status, 200);
   };
@@ -70,6 +75,41 @@ async function waitFor(check) {
   await waitFor(() => js("document.getElementById('groups').textContent.includes('（同步）')"));
   assert.equal(await js("document.getElementById('setup').open"), true, '主动展开的配对说明不被后续同步收起');
   await js("document.getElementById('setup').open=false");
+  assert.equal(await js("document.querySelector('.source-version').dataset.level"), 'current');
+  assert.equal(await js("document.getElementById('extension-update').hidden"), true);
+  await js("document.getElementById('notice').textContent='操作结果保留'");
+  await post('chrome-test', 'Chrome', longTabs, true, '0.4.0');
+  await waitFor(() => js("document.querySelector('.source-version').dataset.level === 'outdated'"));
+  assert.equal(await js("document.querySelector('.source-version').textContent"), '扩展 v0.4.0 · 建议升级');
+  assert.equal(await js("document.getElementById('extension-update').hidden"), false);
+  assert.ok((await js("document.getElementById('extension-update-text').textContent")).includes(releaseVersions.extension));
+  assert.ok((await js("document.getElementById('extension-update-text').textContent")).includes('仅重新同步不会升级扩展'));
+  assert.equal(await js("document.getElementById('notice').textContent"), '操作结果保留', '版本提醒不覆盖操作结果');
+  assert.equal(await js("document.querySelector('.locate-tab').disabled"), false, '版本提醒不阻断已有功能');
+  let openedExtensionPath;
+  const originalOpenPath = shell.openPath;
+  shell.openPath = async path => { openedExtensionPath = path; return ''; };
+  await js("document.getElementById('update-extension').click()");
+  await waitFor(() => Boolean(openedExtensionPath));
+  assert.equal(openedExtensionPath, join(__dirname, '../browser-extension'));
+  shell.openPath = originalOpenPath;
+  await post('chrome-test', 'Chrome', longTabs, true, null);
+  await waitFor(() => js("document.querySelector('.source-version').dataset.level === 'unknown'"));
+  assert.equal(await js("document.querySelector('.source-version').textContent"), '扩展版本未知', '不猜测旧扩展版本');
+  await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  await mkdir('artifacts', { recursive: true });
+  await writeFile('artifacts/version-update-preview.png', (await window.webContents.capturePage()).toPNG());
+  await js("document.getElementById('update-extension').focus()");
+  const [extensionMajor, extensionMinor] = releaseVersions.extension.split('.').map(Number);
+  await post('chrome-test', 'Chrome', longTabs, true, `${extensionMajor}.${extensionMinor + 10}.0`);
+  await waitFor(() => js("document.querySelector('.source-version').dataset.level === 'newer'"));
+  assert.equal(await js("document.getElementById('extension-update').hidden"), true, '数字比较，高版本不提示降级');
+  assert.equal(await js("document.activeElement.matches('#setup summary')"), true, '升级提示收起后焦点仍可操作');
+  await post('chrome-test', 'Chrome', longTabs, true, `${releaseVersions.extension}.0`);
+  await waitFor(() => js("document.querySelector('.source-version').dataset.level === 'current'"));
+  await post('chrome-test', 'Chrome', longTabs);
+  await waitFor(() => js(`document.querySelector('.source-version').textContent === ${JSON.stringify(`扩展 v${releaseVersions.extension}`)}`));
+  await js("document.getElementById('notice').textContent=''");
   const selectedBeforeScroll = await js("Array.from(document.querySelectorAll('.tab-row input:checked'), input => input.dataset.tabId)");
   await js('window.scrollTo(0, 600)');
   await waitFor(() => js("!document.getElementById('back-to-top').hidden"));
@@ -577,7 +617,7 @@ async function waitFor(check) {
   await writeFile('artifacts/auto-preselect-preview.png', (await window.webContents.capturePage()).toPNG());
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   clearTimeout(timeout);
-  console.log('桌面验证通过：原标签页定位与旧扩展提示、标题/网址搜索、只看已选与焦点移交、筛选内操作范围与隐藏项保留，以及排序、预选、来源、关闭、设置、最小窗口和既有回归。');
+  console.log('桌面验证通过：桌面及随包版本、扩展版本上报、旧版/未知/新版提示、升级入口与焦点保留，以及定位、搜索、只看已选、筛选、关闭、设置、最小窗口和既有回归。');
   await rm(temporary, { recursive: true, force: true });
   app.exit(0);
 })().catch((error) => { console.error(error); app.exit(1); });

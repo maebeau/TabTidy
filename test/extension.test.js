@@ -5,6 +5,8 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { startBridge } from '../desktop/bridge.js';
 
+const manifest = JSON.parse(await readFile(new URL('../browser-extension/manifest.json', import.meta.url), 'utf8'));
+
 async function waitFor(check) {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (await check()) return;
@@ -24,7 +26,7 @@ test('扩展通过浏览器消息接口读取普通窗口并发送到本机，�
   const id = 'a'.repeat(32);
   const chrome = {
     alarms: { get: async () => undefined, create: async () => {}, onAlarm: event },
-    runtime: { id, onMessage: { addListener: (listener) => { onMessage = listener; } }, onStartup: event },
+    runtime: { getManifest: () => manifest, id, onMessage: { addListener: (listener) => { onMessage = listener; } }, onStartup: event },
     storage: { local: { get: async () => ({ ...stored }), set: async (values) => Object.assign(stored, values) } },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
     tabs: { query: async () => [
@@ -44,6 +46,7 @@ test('扩展通过浏览器消息接口读取普通窗口并发送到本机，�
   assert.equal((await sync()).ok, true);
   const first = bridge.snapshot()[0];
   assert.equal(first.browser, 'Edge');
+  assert.equal(first.extensionVersion, manifest.version, '上报实际运行扩展的 manifest 版本');
   assert.equal(first.tabs.length, 1);
   assert.equal(first.tabs[0].url, 'https://example.com/1');
   assert.equal(first.tabs[0].openedAt, null);
@@ -69,7 +72,7 @@ test('扩展核对会话、网址和标题后关闭，跳过跳转及隐身页�
   const event = { addListener: () => {} };
   const chrome = {
     alarms: { get: async () => undefined, create: async () => {}, onAlarm: event },
-    runtime: { id: 'a'.repeat(32), onMessage: event, onStartup: event },
+    runtime: { getManifest: () => manifest, id: 'a'.repeat(32), onMessage: event, onStartup: event },
     storage: { local: { get: async () => ({ ...stored }), set: async (values) => Object.assign(stored, values) } },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
     tabs: { query: async () => [...live.values()].map((tab) => ({ ...tab })),
@@ -115,7 +118,7 @@ test('首次配对后通过浏览器闹钟自动重连，桌面与扩展后台�
   const live = new Map([1, 2].map((id) => [id, { id, title: `示例书 第${id}章`, url: `https://example.com/${id}` }]));
   const event = { addListener: () => {} };
   const chrome = {
-    runtime: { id: 'a'.repeat(32), onMessage: event, onStartup: event },
+    runtime: { getManifest: () => manifest, id: 'a'.repeat(32), onMessage: event, onStartup: event },
     storage: { local: { get: async () => ({ ...stored }), set: async (values) => Object.assign(stored, values) } },
     alarms: {
       get: async () => alarm,
@@ -199,7 +202,7 @@ test('定位按浏览器来源激活原标签页及窗口，恢复最小化，�
     let windowState = browser === 'Chrome' ? 'maximized' : 'minimized';
     const event = { addListener: () => {} };
     const chrome = {
-      runtime: { id: 'a'.repeat(32), onMessage: event, onStartup: event },
+      runtime: { getManifest: () => manifest, id: 'a'.repeat(32), onMessage: event, onStartup: event },
       storage: { local: { get: async () => stored, set: async values => Object.assign(stored, values) } },
       alarms: { get: async () => ({}), onAlarm: event },
       action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
