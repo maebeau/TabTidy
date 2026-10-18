@@ -821,6 +821,10 @@ select {
   flex:1;
   min-width:0
 }
+.group-title,.tab-title {
+  user-select:text;
+  cursor:text
+}
 .group-size {
   color:var(--muted);
   font-size:10px;

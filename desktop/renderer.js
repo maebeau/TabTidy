@@ -54,6 +54,55 @@ function updateWebsiteChoices(tabs) {
   list.replaceChildren(list.options[0], ...values.map((host) => { const option = document.createElement('option'); option.value = host; option.textContent = host; return option; }));
 }
 
+function selectedTitleText(element) {
+  const selection = window.getSelection();
+  if (selection.rangeCount !== 1) return '';
+  const range = selection.getRangeAt(0);
+  return element.contains(range.startContainer) && element.contains(range.endContainer) ? selection.toString() : '';
+}
+
+function bindIgnoreSelection(element, url) {
+  element.addEventListener('click', (event) => {
+    if (selectedTitleText(element)) event.preventDefault();
+  });
+  element.addEventListener('contextmenu', async (event) => {
+    const word = selectedTitleText(element).normalize('NFKC').trim();
+    if (!word || word.length > 128 || /[\r\n]/u.test(word) || !/[\p{L}\p{N}]/u.test(word)) return;
+    let host;
+    try {
+      const website = new URL(url);
+      if (!['http:', 'https:'].includes(website.protocol)) return;
+      host = normalizeWebsite(website.hostname);
+    } catch { return; }
+    event.preventDefault();
+    if (!initialized || closing || savingRules || locating) return;
+    try {
+      if (!await window.tabTidy.showIgnoreWordMenu() || closing || savingRules || locating) return;
+      if (editingRule !== null) {
+        const message = '设置中有未保存的编辑，请先保存或取消，再添加忽略词。';
+        notice(message, true);
+        notice(message, true, 'settings-notice');
+        if (!$('settings-dialog').open) $('settings-dialog').showModal();
+        return;
+      }
+      const next = [...ignoreRules];
+      let index = next.findIndex((rule) => rule.domains.includes(host));
+      if (index === -1) {
+        index = next.length;
+        next.push({ name: host.slice(0, 128), domains: [host], ignoredNames: [word] });
+      } else {
+        const rule = next[index];
+        if (rule.ignoredNames.some((name) => name.toLowerCase() === word.toLowerCase())) {
+          notice(`“${word}”已在“${rule.name}”的忽略词中。`);
+          return;
+        }
+        next[index] = { ...rule, ignoredNames: [...rule.ignoredNames, word] };
+      }
+      await persistRules(next, index, `已添加忽略词“${word}”`);
+    } catch (error) { notice(`添加忽略词失败：${error.message}`, true); }
+  });
+}
+
 function editRule(index) {
   editingRule = index;
   const rule = ignoreRules[index];
@@ -208,7 +257,7 @@ function render() {
   const selectedOnly = $('only-selected').checked;
   groups = analyzeTabs(tabs, { sortBy: $('sort-by').value, direction: $('direction').value, ignoredNamesByHost })
     .filter((group) => group.tabs.length >= groupRange.min && group.tabs.length <= groupRange.max)
-    .map((group) => ({ ...group, total: group.tabs.length, title: group.tabs[0].title, tabs: group.tabs.map((tab) => ({ ...tab,
+    .map((group) => ({ ...group, total: group.tabs.length, title: group.tabs[0].title, titleUrl: group.tabs[0].url, tabs: group.tabs.map((tab) => ({ ...tab,
       selected: overrides.has(tab.id) ? overrides.get(tab.id) : autoPreselect && tab.selected,
     })).filter((tab) => (!selectedOnly || tab.selected) && (!query || `${tab.title}\n${tab.url}`.normalize('NFKC').toLocaleLowerCase().includes(query))) }))
     .filter((group) => group.tabs.length > 0);
@@ -225,6 +274,7 @@ function render() {
     const card = $('group-template').content.firstElementChild.cloneNode(true);
     card.querySelector('.group-title').textContent = group.title || '无标题';
     card.querySelector('.group-title').title = group.title || '无标题';
+    bindIgnoreSelection(card.querySelector('.group-title'), group.titleUrl);
     card.querySelector('.group-size').textContent = group.total === group.tabs.length ? `${group.total} 项` : `${group.tabs.length} / ${group.total} 项`;
     card.querySelector('.group-header').title = group.reasons.map((reason) => reason === 'duplicate-url' ? '网址重复' : '标题相似').join(' · ');
     const groupCheckbox = card.querySelector('.group-checkbox');
@@ -257,6 +307,7 @@ function render() {
         if (selectedOnly) render();
       });
       row.querySelector('.tab-title').textContent = tab.title || '无标题';
+      bindIgnoreSelection(row.querySelector('.tab-title'), tab.url);
       row.querySelector('.tab-url').textContent = tab.url || '暂无网址';
       row.querySelector('.browser-label').textContent = sourceLabel(tab);
       row.querySelector('.browser-label').hidden = !mixedSources;

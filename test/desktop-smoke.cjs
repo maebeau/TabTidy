@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, Menu, shell } = require('electron');
 const { mkdtempSync, writeFileSync, readFileSync } = require('node:fs');
 const { mkdir, readFile, rm, writeFile } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
@@ -615,9 +615,106 @@ async function waitFor(check) {
   await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
   assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true, '新增开关后最小窗口主界面不应横向溢出');
   await writeFile('artifacts/auto-preselect-preview.png', (await window.webContents.capturePage()).toPNG());
+  const originalPopup = Menu.prototype.popup;
+  let acceptIgnoreWord = false;
+  let ignoreMenus = 0;
+  Menu.prototype.popup = function (options) {
+    assert.equal(this.items[0].label, '添加为忽略词');
+    assert.equal(options.window, window);
+    ignoreMenus++;
+    if (!acceptIgnoreWord) {
+      originalPopup.call(this, options);
+      setTimeout(() => this.closePopup(window), 100);
+      return;
+    }
+    if (acceptIgnoreWord) this.items[0].click();
+    options.callback();
+  };
+  const selectWord = (selector, word) => js(`(() => {
+    const element=document.querySelector(${JSON.stringify(selector)}); const text=element.firstChild;
+    const start=text.textContent.indexOf(${JSON.stringify(word)}); const range=document.createRange();
+    range.setStart(text,start); range.setEnd(text,start+${word.length});
+    getSelection().removeAllRanges(); getSelection().addRange(range);
+    return element.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2}));
+  })()`);
+  try {
+    await post('edge-test', 'Edge', []);
+    const quickTabs = ['a 新网站名', 'bc 新网站名', 'd 新网站名'].map((title, index) => ({ id: 61 + index, title, url: `https://quick.example/${index}` }));
+    await post('chrome-test', 'Chrome', quickTabs);
+    await waitFor(() => js("document.querySelectorAll('.tab-row').length === 3"));
+    const originalRules = await js('window.tabTidy.getState().then(state=>state.ignoreRules)');
+    await js("document.querySelector('.tab-row input').click()");
+    const manualBeforeMenu = await js("Array.from(document.querySelectorAll('.tab-row input:checked'),input=>input.dataset.tabId)");
+    const wordRect = await js("(() => { const title=document.querySelector('.tab-title'); title.scrollIntoView({block:'center'}); const text=title.firstChild; const start=text.textContent.indexOf('新网站名'); const range=document.createRange(); range.setStart(text,start); range.setEnd(text,start+4); const rect=range.getBoundingClientRect(); return {left:Math.ceil(rect.left+1),right:Math.floor(rect.right-1),y:Math.round(rect.top+rect.height/2)}; })()");
+    window.focus();
+    window.webContents.sendInputEvent({ type: 'mouseDown', x: wordRect.left, y: wordRect.y, button: 'left', clickCount: 1 });
+    window.webContents.sendInputEvent({ type: 'mouseMove', x: wordRect.right, y: wordRect.y, button: 'left' });
+    window.webContents.sendInputEvent({ type: 'mouseUp', x: wordRect.right, y: wordRect.y, button: 'left', clickCount: 1 });
+    await waitFor(() => js("getSelection().toString() === '新网站名'"));
+    await writeFile('artifacts/selection-ignore-preview.png', (await window.webContents.capturePage()).toPNG());
+    const menuX = Math.round((wordRect.left + wordRect.right) / 2);
+    window.webContents.sendInputEvent({ type: 'mouseDown', x: menuX, y: wordRect.y, button: 'right', clickCount: 1 });
+    window.webContents.sendInputEvent({ type: 'mouseUp', x: menuX, y: wordRect.y, button: 'right', clickCount: 1 });
+    await waitFor(() => ignoreMenus === 1);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.deepEqual(await js('window.tabTidy.getState().then(state=>state.ignoreRules)'), originalRules, '取消右键菜单不能写入规则');
+    assert.deepEqual(await js("Array.from(document.querySelectorAll('.tab-row input:checked'),input=>input.dataset.tabId)"), manualBeforeMenu, '选择文字和右键不改变勾选');
+    acceptIgnoreWord = true;
+    await selectWord('.tab-title', '新网站名');
+    await waitFor(() => js("document.getElementById('notice').textContent.includes('已添加忽略词')"));
+    const quickRule = { name: 'quick.example', domains: ['quick.example'], ignoredNames: ['新网站名'] };
+    assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), [...originalRules, quickRule]);
+    assert.equal(await js("document.querySelectorAll('.tab-row').length"), 0, '保存后立即按忽略词重新分组');
+    await js("document.getElementById('open-settings').focus(); document.getElementById('open-settings').click(); document.querySelector('.edit-rule[data-rule-index=\"1\"]').click(); document.getElementById('ignore-name').value='阅读网站'; document.getElementById('ignore-domains').value='quick.example\\nold.quick.example'; document.getElementById('save-ignore').click()");
+    await waitFor(() => js("!document.getElementById('add-rule').disabled"));
+    await js("document.getElementById('close-settings').click()");
+    const quickBooks = [
+      { id: 71, title: '星河旅行 2 - 新网站名 - ＢＯＡＲＤ', url: 'https://old.quick.example/2' },
+      { id: 72, title: '星河旅行 1 - 新网站名 - ＢＯＡＲＤ', url: 'https://quick.example/1' },
+    ];
+    await post('chrome-test', 'Chrome', quickBooks);
+    await waitFor(() => js("document.querySelectorAll('.tab-row').length === 2"));
+    await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:71\"]').click()");
+    await selectWord('.tab-title', 'ＢＯＡＲＤ');
+    await waitFor(() => js("document.getElementById('notice').textContent.includes('“BOARD”')"));
+    const sharedRule = { name: '阅读网站', domains: ['quick.example', 'old.quick.example'], ignoredNames: ['新网站名', 'BOARD'] };
+    assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), [...originalRules, sharedRule], '追加保留规则名称、多个域名和原忽略词');
+    assert.equal(await js("document.querySelector('.tab-row input[data-tab-id=\"chrome-test:71\"]').checked"), true, '自动预选关闭时保留手动勾选');
+    await selectWord('.tab-title', 'ＢＯＡＲＤ');
+    await waitFor(() => js("document.getElementById('notice').textContent.includes('已在')"));
+    assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), [...originalRules, sharedRule], '等价词不重复保存');
+    await js("document.getElementById('open-settings').focus(); document.getElementById('open-settings').click(); document.querySelector('.edit-rule[data-rule-index=\"1\"]').click(); document.getElementById('ignore-words').value='未保存草稿'; document.getElementById('close-settings').click()");
+    await selectWord('.tab-title', 'ＢＯＡＲＤ');
+    await waitFor(() => js("document.getElementById('settings-dialog').open"));
+    assert.equal(await js("document.getElementById('ignore-words').value"), '未保存草稿', '快捷添加不能覆盖设置草稿');
+    assert.ok((await js("document.getElementById('settings-notice').textContent")).includes('未保存'));
+    assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), [...originalRules, sharedRule]);
+    await js("document.getElementById('cancel-rule').click(); document.getElementById('close-settings').click()");
+    await post('chrome-test', 'Chrome', [
+      { ...quickBooks[0], title: '星河旅行 2 - 分区名', url: 'https://quick.example/2' },
+      { ...quickBooks[1], title: '星河旅行 1 - 分区名', url: 'https://other.example/1' },
+    ]);
+    await waitFor(() => js("document.querySelector('.group-title').textContent.includes('分区名')"));
+    await search('other.example');
+    assert.equal(await js("document.querySelectorAll('.tab-row').length"), 1);
+    await selectWord('.group-title', '分区名');
+    await waitFor(() => js("document.getElementById('notice').textContent.includes('“分区名”')"));
+    assert.deepEqual(JSON.parse(await readFile(join(temporary, 'ignored-names.json'), 'utf8')), [...originalRules, { ...sharedRule, ignoredNames: [...sharedRule.ignoredNames, '分区名'] }], '过滤后的分组标题必须使用标题本身的网站，不能用显示行的网站');
+    await search('');
+    const menusBeforeInvalid = ignoreMenus;
+    await js("(() => { const titles=document.querySelectorAll('.tab-title'); const range=document.createRange(); range.setStart(titles[0].firstChild,0); range.setEnd(titles[1].firstChild,2); getSelection().removeAllRanges(); getSelection().addRange(range); titles[0].dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true})); })()");
+    assert.equal(ignoreMenus, menusBeforeInvalid, '跨标题选区不提供忽略入口');
+    await post('chrome-test', 'Chrome', [
+      { id: 81, title: '本地页面 分区名', url: 'file:///example.html' },
+      { id: 82, title: '本地页面 分区名', url: 'file:///example.html' },
+    ]);
+    await waitFor(() => js("document.querySelector('.tab-title').textContent.includes('本地页面')"));
+    assert.equal(await selectWord('.tab-title', '分区名'), true);
+    assert.equal(ignoreMenus, menusBeforeInvalid, '非 HTTP/HTTPS 页面不创建域名规则');
+  } finally { Menu.prototype.popup = originalPopup; }
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   clearTimeout(timeout);
-  console.log('桌面验证通过：桌面及随包版本、扩展版本上报、旧版/未知/新版提示、升级入口与焦点保留，以及定位、搜索、只看已选、筛选、关闭、设置、最小窗口和既有回归。');
+  console.log('桌面验证通过：选中文字右键添加忽略词、新建/追加/去重、菜单取消、域名对应、草稿保护及预选保持，以及版本、定位、搜索、筛选、关闭、设置和既有回归。');
   await rm(temporary, { recursive: true, force: true });
   app.exit(0);
 })().catch((error) => { console.error(error); app.exit(1); });

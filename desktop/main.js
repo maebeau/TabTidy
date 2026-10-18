@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, session, shell } from 'electron';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -53,6 +53,10 @@ async function start() {
     return callback(...args);
   });
   handle('get-state', () => ({ token, sources: bridge.snapshot(), ignoreRules, versions }));
+  handle('ignore-word-menu', () => new Promise((resolve) => {
+    Menu.buildFromTemplate([{ label: '添加为忽略词', enabled: !closingTabs, click: () => resolve(true) }])
+      .popup({ window, callback: () => resolve(false) });
+  }));
   handle('save-ignored-names', async (rules) => {
     if (closingTabs) return { ok: false, error: '正在关闭标签页，请稍后再保存设置。' };
     try {
